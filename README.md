@@ -1,0 +1,399 @@
+# DeepSeek Compatible API Translation Backend
+
+This is a multi-protocol compatibility backend for DeepSeek. It exposes compatible APIs for DeepSeek Chat Completions, OpenAI Chat Completions, OpenAI Responses, Anthropic Messages, Gemini Generate Content, and maps requests to DeepSeek Chat Completions as completely as possible.
+
+It is configured with command-line flags and is suitable for local runs or container deployment.
+
+## Configuration and Usage
+
+The service is configured with command-line flags. You can clone the project and build it locally, or download a prebuilt binary from the Release page:
+
+```bash
+git clone https://github.com/Joey-Kot/deepseek-compatible.git
+cd deepseek-compatible
+go build -trimpath -ldflags="-s -w" -o deepseek-compatible ./cmd/server
+```
+
+```bash
+./deepseek-compatible \
+  --listen :8080 \
+  --api-token sk-local-test \
+  --deepseek-api-key sk-your-deepseek-key \
+  --deepseek-base-url https://api.deepseek.com \
+  --deepseek-model deepseek-v4-pro \
+  --deepseek-models deepseek-v4-pro \
+  --deepseek-http-timeout 120 \
+  --verify-ssl=true \
+  --debug-log-body=false
+```
+
+You can also deploy directly with the published container image:
+
+```bash
+docker run -itd \
+  --name deepseek-compatible \
+  -p 8080:8080 \
+  --restart always \
+  ghcr.io/joey-kot/deepseek-compatible:latest \
+  --listen :8080 \
+  --api-token sk-local-test \
+  --deepseek-api-key sk-your-deepseek-key \
+  --deepseek-base-url https://api.deepseek.com \
+  --deepseek-model deepseek-v4-pro \
+  --deepseek-models deepseek-v4-pro \
+  --deepseek-http-timeout 120 \
+  --verify-ssl=true \
+  --debug-log-body=false
+```
+
+Or clone the project and build the container image yourself:
+
+```bash
+git clone https://github.com/Joey-Kot/deepseek-compatible.git
+cd deepseek-compatible
+docker build -t deepseek-compatible:latest .
+```
+
+```bash
+docker run -itd \
+  --name deepseek-compatible \
+  -p 8080:8080 \
+  --restart always \
+  deepseek-compatible:latest \
+  --listen :8080 \
+  --api-token sk-local-test \
+  --deepseek-api-key sk-your-deepseek-key \
+  --deepseek-base-url https://api.deepseek.com \
+  --deepseek-model deepseek-v4-pro \
+  --deepseek-models deepseek-v4-pro \
+  --deepseek-http-timeout 120 \
+  --verify-ssl=true \
+  --debug-log-body=false
+```
+
+Flag reference:
+
+| Flag | Description |
+| --- | --- |
+| `--listen` | Local HTTP listen address. Defaults to `:8080`. |
+| `--api-token` | Local token required to access this compatibility backend. Multiple tokens can be configured with commas. OpenAI-style requests use `Authorization: Bearer`, Anthropic-style requests use `x-api-key`, and Gemini-style requests use `x-goog-api-key`. |
+| `--deepseek-api-key` | DeepSeek upstream API key. |
+| `--deepseek-base-url` | DeepSeek upstream base URL. If omitted or set to an empty string, the default `https://api.deepseek.com` is used. It may be `http://` or `https://`, and it may point directly to `/chat/completions`. |
+| `--deepseek-model` | Default model ID forwarded to DeepSeek. Defaults to `deepseek-v4-pro`. |
+| `--deepseek-models` | Model IDs exposed by `/v1/models`, separated by commas. If the default model is not included, it is automatically inserted at the front of the list. |
+| `--deepseek-http-timeout` | DeepSeek upstream HTTP timeout in seconds. Defaults to `120`. |
+| `--verify-ssl` | Whether to verify the DeepSeek upstream HTTPS certificate. Defaults to `true`; set to `false` only for trusted proxies or temporary certificate problems. |
+| `--debug-log-body` | Whether to log redacted local request/response bodies and DeepSeek upstream request/response bodies. Defaults to `false`; API keys, tokens, passwords, secrets, and similar fields are replaced with `[REDACTED]`, and log length is capped. |
+
+See `args.example` for the full flag set.
+
+## Compatible Endpoints
+
+### DeepSeek Chat Completions
+
+| Endpoint | Description |
+| --- | --- |
+| `POST /chat/completions` | Create DeepSeek Chat Completions. Request and response parameters correspond one-to-one with the official DeepSeek API. |
+
+### OpenAI Chat Completions
+
+| Endpoint | Description |
+| --- | --- |
+| `POST /v1/chat/completions` | Create Chat Completions and forward them to DeepSeek Chat Completions. |
+| `GET /v1/chat/completions` | List locally stored Chat Completions. |
+| `GET /v1/chat/completions/{completion_id}` | Retrieve one locally stored Chat Completion. |
+| `POST /v1/chat/completions/{completion_id}` | Update metadata for a locally stored Chat Completion. |
+| `DELETE /v1/chat/completions/{completion_id}` | Delete a locally stored Chat Completion. |
+| `GET /v1/chat/completions/{completion_id}/messages` | List messages for a locally stored Chat Completion. |
+
+### OpenAI Responses
+
+| Endpoint | Description |
+| --- | --- |
+| `POST /v1/responses` | Create Responses and forward them to DeepSeek Chat Completions. |
+| `GET /v1/responses/{response_id}` | Retrieve one locally stored Response. |
+| `DELETE /v1/responses/{response_id}` | Delete a locally stored Response. |
+| `GET /v1/responses/{response_id}/input_items` | List input items for a locally stored Response. |
+| `POST /v1/responses/{response_id}/cancel` | Cancel a Response according to local state semantics. |
+| `POST /v1/responses/input_tokens` | Count input tokens locally with the embedded official DeepSeek tokenizer. |
+| `POST /v1/responses/compact` | Use DeepSeek for best-effort context compaction and summarization. |
+
+NOTICE: For Codex CLI MCP namespace tool calls, the Responses adapter expands namespace and tool names into DeepSeek-compatible function names before forwarding them to DeepSeek, and then tries to restore the Responses tool call structure on the way back.
+
+### OpenAI Conversations
+
+| Endpoint | Description |
+| --- | --- |
+| `POST /v1/conversations` | Create a local Conversation. |
+| `GET /v1/conversations/{conversation_id}` | Retrieve a local Conversation. |
+| `POST /v1/conversations/{conversation_id}` | Append to or update a local Conversation. |
+| `DELETE /v1/conversations/{conversation_id}` | Delete a local Conversation. |
+
+### Anthropic Messages
+
+| Endpoint | Description |
+| --- | --- |
+| `POST /v1/messages` | Create an Anthropic Messages response and forward it to DeepSeek Chat Completions. |
+| `POST /v1/messages/count_tokens` | Count Anthropic Messages tokens locally with the embedded official DeepSeek tokenizer. |
+
+### Gemini Generate Content
+
+| Endpoint | Description |
+| --- | --- |
+| `POST /v1beta/models/{model}:generateContent` | Create a Gemini Generate Content response and forward it to DeepSeek Chat Completions. |
+| `POST /v1beta/models/{model}:streamGenerateContent` | Create a streaming Gemini Generate Content response. |
+| `POST /v1beta/models/{model}:countTokens` | Count Gemini v1beta tokens locally with the embedded official DeepSeek tokenizer. |
+| `POST /v1/models/{model}:generateContent` | Create a Gemini v1 Generate Content response and forward it to DeepSeek Chat Completions. |
+| `POST /v1/models/{model}:streamGenerateContent` | Create a streaming Gemini v1 Generate Content response. |
+| `POST /v1/models/{model}:countTokens` | Count Gemini v1 tokens locally with the embedded official DeepSeek tokenizer. |
+
+### Common Endpoints
+
+| Endpoint | Description |
+| --- | --- |
+| `GET /v1/models` | Return the model list exposed to compatible clients. |
+| `GET /health` | Health check endpoint. |
+
+## Parameter Mapping
+
+### DeepSeek Chat Completions
+
+| DeepSeek Chat Completions | DeepSeek Chat Completions |
+| --- | --- |
+| All request parameters | Forwarded to the DeepSeek upstream unchanged. |
+| Non-streaming response | Returned from the DeepSeek upstream unchanged. |
+| Streaming response | DeepSeek upstream SSE chunks are forwarded unchanged. |
+
+`POST /chat/completions` only performs local authentication, redacted debug logging, and upstream error handling. It does not transform parameters.
+
+### OpenAI Chat Completions
+
+| OpenAI Chat Completions | DeepSeek Chat Completions |
+| --- | --- |
+| `model` | `model` |
+| `messages` | `messages` |
+| `developer` role | `system` role |
+| `max_completion_tokens` / `max_tokens` | `max_tokens` |
+| `temperature` | `temperature` |
+| `top_p` | `top_p` |
+| `stop` | `stop` |
+| `presence_penalty` | `presence_penalty` |
+| `frequency_penalty` | `frequency_penalty` |
+| `logprobs` | `logprobs` |
+| `top_logprobs` | `top_logprobs` |
+| `n` | `n` |
+| `seed` | `seed` |
+| `stream` | DeepSeek streaming responses are converted to Chat Completions SSE chunks. |
+| `stream_options.include_usage` | `stream_options.include_usage` |
+| `tools` function tools | `tools` |
+| Deprecated `functions` | `tools` |
+| `tool_choice` / deprecated `function_call` | `tool_choice` |
+| `tool_choice.type=allowed_tools` | Best-effort filtering of available tools, mapped to `auto` / `required`. |
+| `response_format.type=json_object` | `response_format={"type":"json_object"}` |
+| `response_format.type=json_schema` | JSON mode is enabled on a best-effort basis, and the schema is written into the prompt. |
+| `reasoning_effort` | DeepSeek `reasoning_effort`; `low` / `medium` are converted to `high`, and `xhigh` is converted to `max`. |
+| `thinking` | DeepSeek `thinking` |
+
+The official OpenAI Chat Completions response structure does not include reasoning summary. Therefore, DeepSeek `reasoning_content` is preserved and passed through as a DeepSeek extension field, instead of being converted to the OpenAI Responses `reasoning.summary[].summary_text` structure.
+
+When a request sets `store=true`, Chat Completions are stored in local memory. Retrieval, metadata updates, deletion, list filtering by `metadata[key]`, and message listing are local compatibility state. DeepSeek itself does not store these objects, and local state is lost after service restart.
+
+### OpenAI Responses
+
+| OpenAI Responses | DeepSeek Chat Completions |
+| --- | --- |
+| `model` | `model` |
+| `input` string | `messages: [{role: "user", content: input}]` |
+| `input` message items | `messages` |
+| `instructions` | Prepended `system` message |
+| `max_output_tokens` | `max_tokens` |
+| `temperature` | `temperature` |
+| `top_p` | `top_p` |
+| `stop` | `stop` |
+| `tools` function tools | Chat Completions `tools` |
+| `tools` namespace function/custom tools, including Codex CLI MCP tools | Flattened to Chat Completions function tools |
+| `tool_choice` for function/custom tools | Chat Completions `tool_choice` |
+| `text.format.type=json_object` | `response_format={"type":"json_object"}` |
+| `text.format.type=json_schema` | JSON mode is enabled on a best-effort basis, and the schema is written into the prompt. |
+| `reasoning.effort` | DeepSeek `thinking` and `reasoning_effort` |
+| `stream=true` | DeepSeek streaming responses are converted to Responses SSE events. |
+
+DeepSeek `reasoning_content` is mapped to `reasoning.summary[].summary_text` in Responses output. In streaming responses, it is emitted incrementally through reasoning summary SSE events. Responses namespace tools, including the local MCP namespace tool shape used by Codex CLI, are flattened to function tools before being sent to DeepSeek, and are restored to `namespace` / `name` structure on a best-effort basis. OpenAI hosted tools, such as web search, file search, code interpreter, image generation, computer use, remote MCP connectors, moderation, and background queues, do not exist in DeepSeek Chat Completions and are not forwarded.
+
+### Anthropic Messages
+
+| Anthropic Messages | DeepSeek Chat Completions |
+| --- | --- |
+| `model` | `model` |
+| `messages[].role=user/assistant` | `messages[].role=user/assistant` |
+| Top-level `system` | Prepended `system` message |
+| text content blocks | message `content` text |
+| `thinking` content blocks | assistant `reasoning_content` |
+| `tool_use` blocks | assistant `tool_calls` |
+| `tool_result` blocks | `tool` messages |
+| `max_tokens` | `max_tokens` |
+| `temperature` | `temperature` |
+| `top_p` | `top_p` |
+| `stop_sequences` | `stop` |
+| `tools[].input_schema` | function tool `parameters` |
+| `tool_choice.type=auto/any/none/tool` | `auto` / `required` / `none` / named function |
+| `thinking.type=enabled/disabled` | DeepSeek `thinking` |
+| `output_config.format=json_schema` | JSON mode is enabled on a best-effort basis, and the schema is written into the prompt. |
+| `stream=true` | Anthropic Messages SSE events |
+
+Anthropic image, document, search-result, and server-tool blocks are converted to text descriptions on a best-effort basis and sent as DeepSeek context. Tool calls returned by DeepSeek are converted to Anthropic `tool_use` content blocks. Token counting is performed locally with the embedded official DeepSeek tokenizer.
+
+### Gemini Generate Content
+
+| Gemini Generate Content | DeepSeek Chat Completions |
+| --- | --- |
+| path `{model}` | `model` |
+| `contents[].role=user/model` | `user` / `assistant` messages |
+| `contents[].parts[].text` | message `content` text |
+| `systemInstruction.parts[].text` | Prepended `system` message |
+| `functionCall` parts | assistant `tool_calls` |
+| `functionResponse` parts | `tool` messages |
+| `generationConfig.maxOutputTokens` | `max_tokens` |
+| `generationConfig.temperature` | `temperature` |
+| `generationConfig.topP` | `top_p` |
+| `generationConfig.stopSequences` | `stop` |
+| `generationConfig.responseMimeType=application/json` | `response_format={"type":"json_object"}` |
+| `generationConfig.responseSchema` | JSON mode is enabled on a best-effort basis, and the schema is written into the prompt. |
+| `generationConfig.thinkingConfig` | DeepSeek `thinking` / `reasoning_effort` |
+| `tools[].functionDeclarations` | function tools |
+| `toolConfig.functionCallingConfig` | `tool_choice`, with best-effort filtering of available tools. |
+| `:streamGenerateContent` | Gemini SSE chunks |
+
+Gemini multimodal input parts and built-in tools are converted to text context on a best-effort basis. Functions defined through `functionDeclarations` are mapped to DeepSeek function tools. Tool calls returned by DeepSeek are converted to Gemini `functionCall` parts.
+
+## Request Examples
+
+Health check:
+
+```bash
+curl http://localhost:8080/health
+```
+
+Create a DeepSeek Chat Completion:
+
+```bash
+curl http://localhost:8080/chat/completions \
+  -H "Authorization: Bearer sk-local-test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-v4-pro",
+    "messages": [
+      {"role": "system", "content": "You are a helpful assistant."},
+      {"role": "user", "content": "Hello!"}
+    ],
+    "reasoning_effort": "high"
+  }'
+```
+
+Create OpenAI Responses:
+
+```bash
+curl http://localhost:8080/v1/responses \
+  -H "Authorization: Bearer sk-local-test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-v4-pro",
+    "instructions": "You are a helpful assistant.",
+    "input": "Hello!",
+    "reasoning": {"effort": "high"}
+  }'
+```
+
+Create an OpenAI Chat Completion:
+
+```bash
+curl http://localhost:8080/v1/chat/completions \
+  -H "Authorization: Bearer sk-local-test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-v4-pro",
+    "messages": [
+      {"role": "system", "content": "You are a helpful assistant."},
+      {"role": "user", "content": "Hello!"}
+    ],
+    "reasoning_effort": "high"
+  }'
+```
+
+Create an Anthropic Message:
+
+```bash
+curl http://localhost:8080/v1/messages \
+  -H "x-api-key: sk-local-test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-v4-pro",
+    "max_tokens": 128,
+    "system": "You are a helpful assistant.",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+```
+
+Create Gemini Generate Content:
+
+```bash
+curl http://localhost:8080/v1beta/models/gemini-3.5-flash:generateContent \
+  -H "x-goog-api-key: sk-local-test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [{
+      "role": "user",
+      "parts": [{"text": "Hello!"}]
+    }]
+  }'
+```
+
+Create a streaming OpenAI Responses response:
+
+```bash
+curl http://localhost:8080/v1/responses \
+  -H "Authorization: Bearer sk-local-test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-v4-pro",
+    "input": "Write one haiku.",
+    "stream": true
+  }'
+```
+
+Use an OpenAI Responses function tool:
+
+```bash
+curl http://localhost:8080/v1/responses \
+  -H "Authorization: Bearer sk-local-test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-v4-pro",
+    "input": "What is the weather in New York?",
+    "tools": [{
+      "type": "function",
+      "name": "get_weather",
+      "description": "Get weather by city.",
+      "parameters": {
+        "type": "object",
+        "properties": {"city": {"type": "string"}},
+        "required": ["city"]
+      }
+    }],
+    "tool_choice": "auto"
+  }'
+```
+
+## Compatibility Notes
+
+This backend stores Responses and Conversations state in memory to support compatibility features such as `previous_response_id`, `conversation`, retrieval, deletion, and input item listing. Without external storage, this local state is lost after service restart.
+
+DeepSeek Chat Completions does not provide a server-side token counting endpoint, so this backend embeds the official DeepSeek tokenizer and provides local token counting for the OpenAI Responses, Anthropic Messages, and Gemini Generate Content token counting endpoints.
+
+`POST /v1/responses/{id}/cancel` can only mark not-yet-completed Responses according to local state semantics. Normal requests complete synchronously, and DeepSeek Chat Completions does not provide OpenAI-style background task execution.
+
+DeepSeek may return `reasoning_content`. This backend maps it to the target API's structured reasoning shape when one exists: OpenAI Responses maps it to `reasoning.summary[].summary_text`, Anthropic maps it to `thinking` blocks, and Gemini maps it to `thought` parts. The official OpenAI Chat Completions response structure does not include reasoning summary, so Chat Completions preserves and passes through DeepSeek `reasoning_content` as an extension field.
+
+## License
+
+This project is licensed under the GNU General Public License v3.0 or later (GPLv3+). See [LICENSE](LICENSE) for details.

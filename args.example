@@ -1,0 +1,9 @@
+--listen :8080
+--api-token sk-local-test
+--deepseek-api-key sk-your-deepseek-key
+--deepseek-base-url https://api.deepseek.com
+--deepseek-model deepseek-v4-pro
+--deepseek-models deepseek-v4-pro
+--deepseek-http-timeout 120
+--verify-ssl=true
+--debug-log-body=false
