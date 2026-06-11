@@ -33,10 +33,10 @@ FROM alpine:3.20
 RUN apk add --no-cache ca-certificates
 
 COPY --from=build /out/deepseek-compatible /usr/local/bin/deepseek-compatible
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 USER 65532:65532
 
 EXPOSE 8080
 
-ENTRYPOINT ["deepseek-compatible"]
-CMD ["--listen", ":8080"]
+ENTRYPOINT ["docker-entrypoint.sh"]

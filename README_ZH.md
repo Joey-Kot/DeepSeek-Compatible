@@ -2,11 +2,11 @@
 
 这是一个面向 DeepSeek 的多协议兼容转换后端。它对外提供 DeepSeek Chat Completions、OpenAI Chat Completions、OpenAI Responses、Anthropic Messages 和 Gemini Generate Content 等兼容 API，并将请求尽可能完整地映射、转发到 DeepSeek Chat Completions。
 
-通过命令行参数进行配置，适合本地运行、容器部署。
+本地运行时通过命令行参数进行配置，容器部署时通过环境变量进行配置。
 
 ## 配置与使用
 
-服务通过命令行参数配置。
+本地二进制运行时，服务通过命令行参数配置。
 可以拉取项目后自行编译运行或直接从 Release 下载：
 
 ```bash
@@ -28,23 +28,21 @@ go build -trimpath -ldflags="-s -w" -o deepseek-compatible ./cmd/server
   --debug-log-body=false
 ```
 
-也可以直接拉取线上镜像部署：
+容器部署时使用环境变量。可以先从 `docker.env.example` 复制一份配置：
+
+```bash
+cp docker.env.example docker.env
+```
+
+编辑 `docker.env` 后，可以直接拉取线上镜像部署：
 
 ```bash
 docker run -itd \
   --name deepseek-compatible \
   -p 8080:8080 \
+  --env-file docker.env \
   --restart always \
-  ghcr.io/joey-kot/deepseek-compatible:latest \
-  --listen :8080 \
-  --api-token sk-local-test \
-  --deepseek-api-key sk-your-deepseek-key \
-  --deepseek-base-url https://api.deepseek.com \
-  --deepseek-model deepseek-v4-pro \
-  --deepseek-models deepseek-v4-pro \
-  --deepseek-http-timeout 120 \
-  --verify-ssl=true \
-  --debug-log-body=false
+  ghcr.io/joey-kot/deepseek-compatible:latest
 ```
 
 也可以拉取项目后自行构建镜像部署：
@@ -59,18 +57,24 @@ docker build -t deepseek-compatible:latest .
 docker run -itd \
   --name deepseek-compatible \
   -p 8080:8080 \
+  --env-file docker.env \
   --restart always \
-  deepseek-compatible:latest \
-  --listen :8080 \
-  --api-token sk-local-test \
-  --deepseek-api-key sk-your-deepseek-key \
-  --deepseek-base-url https://api.deepseek.com \
-  --deepseek-model deepseek-v4-pro \
-  --deepseek-models deepseek-v4-pro \
-  --deepseek-http-timeout 120 \
-  --verify-ssl=true \
-  --debug-log-body=false
+  deepseek-compatible:latest
 ```
+
+容器环境变量说明：
+
+| 环境变量 | 对应参数 |
+| --- | --- |
+| `LISTEN` | `--listen` |
+| `API_TOKEN` | `--api-token` |
+| `DEEPSEEK_API_KEY` | `--deepseek-api-key` |
+| `DEEPSEEK_BASE_URL` | `--deepseek-base-url` |
+| `DEEPSEEK_MODEL` | `--deepseek-model` |
+| `DEEPSEEK_MODELS` | `--deepseek-models` |
+| `DEEPSEEK_HTTP_TIMEOUT` | `--deepseek-http-timeout` |
+| `VERIFY_SSL` | `--verify-ssl` |
+| `DEBUG_LOG_BODY` | `--debug-log-body` |
 
 参数说明：
 

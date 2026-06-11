@@ -2,11 +2,11 @@
 
 This is a multi-protocol compatibility backend for DeepSeek. It exposes compatible APIs for DeepSeek Chat Completions, OpenAI Chat Completions, OpenAI Responses, Anthropic Messages, Gemini Generate Content, and maps requests to DeepSeek Chat Completions as completely as possible.
 
-It is configured with command-line flags and is suitable for local runs or container deployment.
+It is configured with command-line flags for local runs and environment variables for container deployment.
 
 ## Configuration and Usage
 
-The service is configured with command-line flags. You can clone the project and build it locally, or download a prebuilt binary from the Release page:
+For local binary runs, configure the service with command-line flags. You can clone the project and build it locally, or download a prebuilt binary from the Release page:
 
 ```bash
 git clone https://github.com/Joey-Kot/deepseek-compatible.git
@@ -27,23 +27,21 @@ go build -trimpath -ldflags="-s -w" -o deepseek-compatible ./cmd/server
   --debug-log-body=false
 ```
 
-You can also deploy directly with the published container image:
+For container deployment, use environment variables. You can start from `docker.env.example`:
+
+```bash
+cp docker.env.example docker.env
+```
+
+Then edit `docker.env` and deploy directly with the published container image:
 
 ```bash
 docker run -itd \
   --name deepseek-compatible \
   -p 8080:8080 \
+  --env-file docker.env \
   --restart always \
-  ghcr.io/joey-kot/deepseek-compatible:latest \
-  --listen :8080 \
-  --api-token sk-local-test \
-  --deepseek-api-key sk-your-deepseek-key \
-  --deepseek-base-url https://api.deepseek.com \
-  --deepseek-model deepseek-v4-pro \
-  --deepseek-models deepseek-v4-pro \
-  --deepseek-http-timeout 120 \
-  --verify-ssl=true \
-  --debug-log-body=false
+  ghcr.io/joey-kot/deepseek-compatible:latest
 ```
 
 Or clone the project and build the container image yourself:
@@ -58,18 +56,24 @@ docker build -t deepseek-compatible:latest .
 docker run -itd \
   --name deepseek-compatible \
   -p 8080:8080 \
+  --env-file docker.env \
   --restart always \
-  deepseek-compatible:latest \
-  --listen :8080 \
-  --api-token sk-local-test \
-  --deepseek-api-key sk-your-deepseek-key \
-  --deepseek-base-url https://api.deepseek.com \
-  --deepseek-model deepseek-v4-pro \
-  --deepseek-models deepseek-v4-pro \
-  --deepseek-http-timeout 120 \
-  --verify-ssl=true \
-  --debug-log-body=false
+  deepseek-compatible:latest
 ```
+
+Container environment reference:
+
+| Environment variable | Equivalent flag |
+| --- | --- |
+| `LISTEN` | `--listen` |
+| `API_TOKEN` | `--api-token` |
+| `DEEPSEEK_API_KEY` | `--deepseek-api-key` |
+| `DEEPSEEK_BASE_URL` | `--deepseek-base-url` |
+| `DEEPSEEK_MODEL` | `--deepseek-model` |
+| `DEEPSEEK_MODELS` | `--deepseek-models` |
+| `DEEPSEEK_HTTP_TIMEOUT` | `--deepseek-http-timeout` |
+| `VERIFY_SSL` | `--verify-ssl` |
+| `DEBUG_LOG_BODY` | `--debug-log-body` |
 
 Flag reference:
 
