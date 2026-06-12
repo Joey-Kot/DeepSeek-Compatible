@@ -72,6 +72,11 @@ Container environment reference:
 | `DEEPSEEK_MODEL` | `--deepseek-model` |
 | `DEEPSEEK_MODELS` | `--deepseek-models` |
 | `DEEPSEEK_HTTP_TIMEOUT` | `--deepseek-http-timeout` |
+| `DEEPSEEK_MAX_IDLE_CONNS` | `--deepseek-max-idle-conns` |
+| `DEEPSEEK_MAX_IDLE_CONNS_PER_HOST` | `--deepseek-max-idle-conns-per-host` |
+| `DEEPSEEK_MAX_CONNS_PER_HOST` | `--deepseek-max-conns-per-host` |
+| `READ_HEADER_TIMEOUT` | `--read-header-timeout` |
+| `IDLE_TIMEOUT` | `--idle-timeout` |
 | `VERIFY_SSL` | `--verify-ssl` |
 | `DEBUG_LOG_BODY` | `--debug-log-body` |
 
@@ -86,6 +91,11 @@ Flag reference:
 | `--deepseek-model` | Default model ID forwarded to DeepSeek. Defaults to `deepseek-v4-pro`. |
 | `--deepseek-models` | Model IDs exposed by `/v1/models`, separated by commas. If the default model is not included, it is automatically inserted at the front of the list. |
 | `--deepseek-http-timeout` | DeepSeek upstream HTTP timeout in seconds. Defaults to `120`. |
+| `--deepseek-max-idle-conns` | Maximum idle upstream HTTP connections kept for reuse. Defaults to `200`. |
+| `--deepseek-max-idle-conns-per-host` | Maximum idle upstream HTTP connections kept per host. Defaults to `100`. |
+| `--deepseek-max-conns-per-host` | Maximum concurrent upstream HTTP connections per host. Defaults to `0`, which means unlimited. |
+| `--read-header-timeout` | Local HTTP read header timeout in seconds. Defaults to `10`. |
+| `--idle-timeout` | Local HTTP idle connection timeout in seconds. Defaults to `120`. |
 | `--verify-ssl` | Whether to verify the DeepSeek upstream HTTPS certificate. Defaults to `true`; set to `false` only for trusted proxies or temporary certificate problems. |
 | `--debug-log-body` | Whether to log redacted local request/response bodies and DeepSeek upstream request/response bodies. Defaults to `false`; API keys, tokens, passwords, secrets, and similar fields are replaced with `[REDACTED]`, and log length is capped. |
 

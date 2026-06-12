@@ -41,9 +41,6 @@ func (a Adapter) Prepare(payload shared.Map) (Prepared, error) {
 	if err != nil {
 		return Prepared{}, err
 	}
-	if a.Store != nil {
-		a.Store.RegisterItems(inputItems)
-	}
 	allItems := append(shared.CloneSlice(contextItems), inputItems...)
 	messages := InputItemsToChatMessages(allItems)
 	if instructions := shared.StringValue(payload["instructions"]); instructions != "" {

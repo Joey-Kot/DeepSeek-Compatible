@@ -37,6 +37,21 @@ func TestParseDefaults(t *testing.T) {
 	if cfg.DeepSeekHTTPTimeout != 120*time.Second {
 		t.Fatalf("DeepSeekHTTPTimeout = %s", cfg.DeepSeekHTTPTimeout)
 	}
+	if cfg.DeepSeekMaxIdleConns != 200 {
+		t.Fatalf("DeepSeekMaxIdleConns = %d", cfg.DeepSeekMaxIdleConns)
+	}
+	if cfg.DeepSeekMaxIdleConnsPerHost != 100 {
+		t.Fatalf("DeepSeekMaxIdleConnsPerHost = %d", cfg.DeepSeekMaxIdleConnsPerHost)
+	}
+	if cfg.DeepSeekMaxConnsPerHost != 0 {
+		t.Fatalf("DeepSeekMaxConnsPerHost = %d", cfg.DeepSeekMaxConnsPerHost)
+	}
+	if cfg.ReadHeaderTimeout != 10*time.Second {
+		t.Fatalf("ReadHeaderTimeout = %s", cfg.ReadHeaderTimeout)
+	}
+	if cfg.IdleTimeout != 120*time.Second {
+		t.Fatalf("IdleTimeout = %s", cfg.IdleTimeout)
+	}
 	if !cfg.VerifySSL {
 		t.Fatal("VerifySSL should default to true")
 	}
@@ -51,6 +66,11 @@ func TestParseCommandLineFlags(t *testing.T) {
 		"--deepseek-model", "deepseek-v4-flash",
 		"--deepseek-models", "deepseek-v4-pro,deepseek-v4-flash",
 		"--deepseek-http-timeout", "2.5",
+		"--deepseek-max-idle-conns", "300",
+		"--deepseek-max-idle-conns-per-host", "150",
+		"--deepseek-max-conns-per-host", "80",
+		"--read-header-timeout", "3.5",
+		"--idle-timeout", "45",
 		"--debug-log-body=true",
 		"--verify-ssl=false",
 	})
@@ -68,6 +88,21 @@ func TestParseCommandLineFlags(t *testing.T) {
 	}
 	if cfg.DeepSeekHTTPTimeout != 2500*time.Millisecond {
 		t.Fatalf("DeepSeekHTTPTimeout = %s", cfg.DeepSeekHTTPTimeout)
+	}
+	if cfg.DeepSeekMaxIdleConns != 300 {
+		t.Fatalf("DeepSeekMaxIdleConns = %d", cfg.DeepSeekMaxIdleConns)
+	}
+	if cfg.DeepSeekMaxIdleConnsPerHost != 150 {
+		t.Fatalf("DeepSeekMaxIdleConnsPerHost = %d", cfg.DeepSeekMaxIdleConnsPerHost)
+	}
+	if cfg.DeepSeekMaxConnsPerHost != 80 {
+		t.Fatalf("DeepSeekMaxConnsPerHost = %d", cfg.DeepSeekMaxConnsPerHost)
+	}
+	if cfg.ReadHeaderTimeout != 3500*time.Millisecond {
+		t.Fatalf("ReadHeaderTimeout = %s", cfg.ReadHeaderTimeout)
+	}
+	if cfg.IdleTimeout != 45*time.Second {
+		t.Fatalf("IdleTimeout = %s", cfg.IdleTimeout)
 	}
 	if !cfg.DebugLogBody {
 		t.Fatalf("boolean flags were not parsed: %#v", cfg)
@@ -90,5 +125,21 @@ func TestParsePrependsDefaultModelWhenMissingFromModelList(t *testing.T) {
 func TestParseRejectsNonPositiveTimeout(t *testing.T) {
 	if _, err := Parse([]string{"--deepseek-http-timeout", "0"}); err == nil {
 		t.Fatal("expected error for zero timeout")
+	}
+}
+
+func TestParseRejectsInvalidConnectionLimits(t *testing.T) {
+	for _, flag := range []string{"--deepseek-max-idle-conns", "--deepseek-max-idle-conns-per-host", "--deepseek-max-conns-per-host"} {
+		if _, err := Parse([]string{flag, "-1"}); err == nil {
+			t.Fatalf("expected error for %s", flag)
+		}
+	}
+}
+
+func TestParseRejectsNonPositiveServerTimeouts(t *testing.T) {
+	for _, flag := range []string{"--read-header-timeout", "--idle-timeout"} {
+		if _, err := Parse([]string{flag, "0"}); err == nil {
+			t.Fatalf("expected error for %s", flag)
+		}
 	}
 }

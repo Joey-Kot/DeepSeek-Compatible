@@ -154,6 +154,38 @@ func TestNewConfiguresTLSVerification(t *testing.T) {
 	}
 }
 
+func TestNewConfiguresConnectionPool(t *testing.T) {
+	client := New("https://deepseek.test", "sk-upstream", time.Second, true)
+	transport := httpTransport(client.HTTPClient)
+	if transport.MaxIdleConns != 200 {
+		t.Fatalf("MaxIdleConns = %d", transport.MaxIdleConns)
+	}
+	if transport.MaxIdleConnsPerHost != 100 {
+		t.Fatalf("MaxIdleConnsPerHost = %d", transport.MaxIdleConnsPerHost)
+	}
+	if transport.MaxConnsPerHost != 0 {
+		t.Fatalf("MaxConnsPerHost = %d", transport.MaxConnsPerHost)
+	}
+}
+
+func TestNewWithTransportConfig(t *testing.T) {
+	client := NewWithTransportConfig("https://deepseek.test", "sk-upstream", time.Second, true, TransportConfig{
+		MaxIdleConns:        20,
+		MaxIdleConnsPerHost: 10,
+		MaxConnsPerHost:     5,
+	})
+	transport := httpTransport(client.HTTPClient)
+	if transport.MaxIdleConns != 20 {
+		t.Fatalf("MaxIdleConns = %d", transport.MaxIdleConns)
+	}
+	if transport.MaxIdleConnsPerHost != 10 {
+		t.Fatalf("MaxIdleConnsPerHost = %d", transport.MaxIdleConnsPerHost)
+	}
+	if transport.MaxConnsPerHost != 5 {
+		t.Fatalf("MaxConnsPerHost = %d", transport.MaxConnsPerHost)
+	}
+}
+
 func TestStreamChatParsesSSEDataChunks(t *testing.T) {
 	client := New("https://deepseek.test", "sk-upstream", time.Second, true)
 	client.HTTPClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
@@ -203,11 +235,19 @@ func isInsecureSkipVerify(client *http.Client) bool {
 	if client == nil {
 		return false
 	}
-	transport, ok := client.Transport.(*http.Transport)
-	if !ok || transport.TLSClientConfig == nil {
+	transport := httpTransport(client)
+	if transport == nil || transport.TLSClientConfig == nil {
 		return false
 	}
 	return transport.TLSClientConfig.InsecureSkipVerify
+}
+
+func httpTransport(client *http.Client) *http.Transport {
+	if client == nil {
+		return nil
+	}
+	transport, _ := client.Transport.(*http.Transport)
+	return transport
 }
 
 func jsonResponse(status int, body string) *http.Response {

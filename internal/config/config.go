@@ -24,15 +24,20 @@ const (
 )
 
 type Config struct {
-	Listen              string
-	APITokens           []string
-	DeepSeekAPIKey      string
-	DeepSeekBaseURL     string
-	DefaultModel        string
-	ModelIDs            []string
-	DeepSeekHTTPTimeout time.Duration
-	DebugLogBody        bool
-	VerifySSL           bool
+	Listen                      string
+	APITokens                   []string
+	DeepSeekAPIKey              string
+	DeepSeekBaseURL             string
+	DefaultModel                string
+	ModelIDs                    []string
+	DeepSeekHTTPTimeout         time.Duration
+	DeepSeekMaxIdleConns        int
+	DeepSeekMaxIdleConnsPerHost int
+	DeepSeekMaxConnsPerHost     int
+	ReadHeaderTimeout           time.Duration
+	IdleTimeout                 time.Duration
+	DebugLogBody                bool
+	VerifySSL                   bool
 }
 
 func Parse(args []string) (Config, error) {
@@ -41,7 +46,13 @@ func Parse(args []string) (Config, error) {
 	var apiTokenCSV string
 	var modelCSV string
 	var timeoutSeconds float64
-	cfg := Config{VerifySSL: true}
+	var readHeaderTimeoutSeconds float64
+	var idleTimeoutSeconds float64
+	cfg := Config{
+		DeepSeekMaxIdleConns:        200,
+		DeepSeekMaxIdleConnsPerHost: 100,
+		VerifySSL:                   true,
+	}
 
 	fs.StringVar(&cfg.Listen, "listen", ":8080", "HTTP listen address")
 	fs.StringVar(&apiTokenCSV, "api-token", "", "comma-separated local bearer token list")
@@ -50,6 +61,11 @@ func Parse(args []string) (Config, error) {
 	fs.StringVar(&cfg.DefaultModel, "deepseek-model", DefaultModel, "default DeepSeek model")
 	fs.StringVar(&modelCSV, "deepseek-models", "", "comma-separated model IDs exposed by /v1/models")
 	fs.Float64Var(&timeoutSeconds, "deepseek-http-timeout", 120, "DeepSeek HTTP timeout in seconds")
+	fs.IntVar(&cfg.DeepSeekMaxIdleConns, "deepseek-max-idle-conns", cfg.DeepSeekMaxIdleConns, "maximum idle upstream HTTP connections")
+	fs.IntVar(&cfg.DeepSeekMaxIdleConnsPerHost, "deepseek-max-idle-conns-per-host", cfg.DeepSeekMaxIdleConnsPerHost, "maximum idle upstream HTTP connections per host")
+	fs.IntVar(&cfg.DeepSeekMaxConnsPerHost, "deepseek-max-conns-per-host", 0, "maximum upstream HTTP connections per host; 0 means unlimited")
+	fs.Float64Var(&readHeaderTimeoutSeconds, "read-header-timeout", 10, "local HTTP read header timeout in seconds")
+	fs.Float64Var(&idleTimeoutSeconds, "idle-timeout", 120, "local HTTP idle timeout in seconds")
 	fs.BoolVar(&cfg.DebugLogBody, "debug-log-body", false, "log redacted request/response bodies")
 	fs.BoolVar(&cfg.VerifySSL, "verify-ssl", true, "verify DeepSeek upstream TLS certificates")
 
@@ -73,7 +89,24 @@ func Parse(args []string) (Config, error) {
 	if timeoutSeconds <= 0 {
 		return Config{}, fmt.Errorf("--deepseek-http-timeout must be positive")
 	}
+	if cfg.DeepSeekMaxIdleConns < 0 {
+		return Config{}, fmt.Errorf("--deepseek-max-idle-conns must be non-negative")
+	}
+	if cfg.DeepSeekMaxIdleConnsPerHost < 0 {
+		return Config{}, fmt.Errorf("--deepseek-max-idle-conns-per-host must be non-negative")
+	}
+	if cfg.DeepSeekMaxConnsPerHost < 0 {
+		return Config{}, fmt.Errorf("--deepseek-max-conns-per-host must be non-negative")
+	}
+	if readHeaderTimeoutSeconds <= 0 {
+		return Config{}, fmt.Errorf("--read-header-timeout must be positive")
+	}
+	if idleTimeoutSeconds <= 0 {
+		return Config{}, fmt.Errorf("--idle-timeout must be positive")
+	}
 	cfg.DeepSeekHTTPTimeout = time.Duration(timeoutSeconds * float64(time.Second))
+	cfg.ReadHeaderTimeout = time.Duration(readHeaderTimeoutSeconds * float64(time.Second))
+	cfg.IdleTimeout = time.Duration(idleTimeoutSeconds * float64(time.Second))
 	return cfg, nil
 }
 

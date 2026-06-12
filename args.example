@@ -5,5 +5,10 @@
 --deepseek-model deepseek-v4-pro
 --deepseek-models deepseek-v4-pro
 --deepseek-http-timeout 120
+--deepseek-max-idle-conns 200
+--deepseek-max-idle-conns-per-host 100
+--deepseek-max-conns-per-host 0
+--read-header-timeout 10
+--idle-timeout 120
 --verify-ssl=true
 --debug-log-body=false

@@ -78,6 +78,21 @@ func TestNamespaceToolsFlattenAndRestore(t *testing.T) {
 	}
 }
 
+func TestPrepareDoesNotRegisterTransientInputItems(t *testing.T) {
+	store := state.New()
+	adapter := Adapter{DefaultModel: "deepseek-v4-pro", Store: store}
+
+	_, err := adapter.Prepare(map[string]any{
+		"input": []any{map[string]any{"id": "msg_transient", "type": "message", "role": "user", "content": "hello"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if item, ok := store.Item("msg_transient"); ok {
+		t.Fatalf("transient input item was registered: %#v", item)
+	}
+}
+
 func TestReasoningIsPreservedForToolCallContext(t *testing.T) {
 	adapter := Adapter{}
 	completion := map[string]any{"choices": []any{map[string]any{

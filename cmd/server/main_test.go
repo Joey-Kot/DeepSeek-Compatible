@@ -11,9 +11,38 @@
 
 package main
 
-import "testing"
+import (
+	"net/http"
+	"testing"
+	"time"
+
+	"deepseek-responses-compatible/internal/config"
+)
 
 func TestEntrypointPackageBuilds(t *testing.T) {
 	// Server startup is exercised by building cmd/server; runtime behavior is
 	// covered through internal/httpapi and internal/config tests.
+}
+
+func TestNewHTTPServerUsesConfiguredTimeouts(t *testing.T) {
+	handler := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})
+	cfg := config.Config{
+		Listen:            "127.0.0.1:0",
+		ReadHeaderTimeout: 3 * time.Second,
+		IdleTimeout:       45 * time.Second,
+	}
+
+	server := newHTTPServer(cfg, handler)
+	if server.Addr != cfg.Listen {
+		t.Fatalf("Addr = %q", server.Addr)
+	}
+	if server.Handler == nil {
+		t.Fatal("handler was not configured")
+	}
+	if server.ReadHeaderTimeout != cfg.ReadHeaderTimeout {
+		t.Fatalf("ReadHeaderTimeout = %s", server.ReadHeaderTimeout)
+	}
+	if server.IdleTimeout != cfg.IdleTimeout {
+		t.Fatalf("IdleTimeout = %s", server.IdleTimeout)
+	}
 }

@@ -36,8 +36,26 @@ type Client struct {
 	HTTPClient   *http.Client
 }
 
+type TransportConfig struct {
+	MaxIdleConns        int
+	MaxIdleConnsPerHost int
+	MaxConnsPerHost     int
+}
+
+func DefaultTransportConfig() TransportConfig {
+	return TransportConfig{
+		MaxIdleConns:        200,
+		MaxIdleConnsPerHost: 100,
+		MaxConnsPerHost:     0,
+	}
+}
+
 func New(baseURL, apiKey string, timeout time.Duration, verifySSL bool) *Client {
-	return &Client{BaseURL: baseURL, APIKey: apiKey, Timeout: timeout, HTTPClient: newHTTPClient(timeout, verifySSL)}
+	return NewWithTransportConfig(baseURL, apiKey, timeout, verifySSL, DefaultTransportConfig())
+}
+
+func NewWithTransportConfig(baseURL, apiKey string, timeout time.Duration, verifySSL bool, transportConfig TransportConfig) *Client {
+	return &Client{BaseURL: baseURL, APIKey: apiKey, Timeout: timeout, HTTPClient: newHTTPClient(timeout, verifySSL, transportConfig)}
 }
 
 func (c *Client) Chat(ctx context.Context, payload shared.Map) (shared.Map, error) {
@@ -155,8 +173,17 @@ func (c *Client) httpClient() *http.Client {
 	return &http.Client{Timeout: c.Timeout}
 }
 
-func newHTTPClient(timeout time.Duration, verifySSL bool) *http.Client {
+func newHTTPClient(timeout time.Duration, verifySSL bool, config TransportConfig) *http.Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
+	if config.MaxIdleConns > 0 {
+		transport.MaxIdleConns = config.MaxIdleConns
+	}
+	if config.MaxIdleConnsPerHost > 0 {
+		transport.MaxIdleConnsPerHost = config.MaxIdleConnsPerHost
+	}
+	if config.MaxConnsPerHost > 0 {
+		transport.MaxConnsPerHost = config.MaxConnsPerHost
+	}
 	if !verifySSL {
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}

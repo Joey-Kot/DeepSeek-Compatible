@@ -76,12 +76,12 @@ func (s *Store) SaveResponse(response shared.Map, contextItems, outputItems []sh
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	responseID := shared.StringValue(response["id"])
-	full := append(shared.CloneSlice(contextItems), shared.CloneSlice(outputItems)...)
-	s.ResponseContextItems[responseID] = full
-	s.ResponseInputItems[responseID] = shared.CloneSlice(contextItems)
-	s.registerItemsLocked(contextItems)
-	s.registerItemsLocked(outputItems)
 	if store {
+		full := append(shared.CloneSlice(contextItems), shared.CloneSlice(outputItems)...)
+		s.ResponseContextItems[responseID] = full
+		s.ResponseInputItems[responseID] = shared.CloneSlice(contextItems)
+		s.registerItemsLocked(contextItems)
+		s.registerItemsLocked(outputItems)
 		s.Responses[responseID] = shared.CloneMap(response)
 	}
 	if conversationID != "" {
@@ -99,9 +99,11 @@ func (s *Store) DeleteResponse(id string) bool {
 	if _, ok := s.Responses[id]; !ok {
 		return false
 	}
+	items := append(shared.CloneSlice(s.ResponseInputItems[id]), s.ResponseContextItems[id]...)
 	delete(s.Responses, id)
 	delete(s.ResponseInputItems, id)
 	delete(s.ResponseContextItems, id)
+	s.deleteUnreferencedItemsLocked(items)
 	return true
 }
 
@@ -248,9 +250,54 @@ func (s *Store) DeleteConversation(id string) bool {
 	if _, ok := s.Conversations[id]; !ok {
 		return false
 	}
+	items := shared.CloneSlice(s.ConversationItems[id])
 	delete(s.Conversations, id)
 	delete(s.ConversationItems, id)
+	s.deleteUnreferencedItemsLocked(items)
 	return true
+}
+
+func (s *Store) deleteUnreferencedItemsLocked(items []shared.Map) {
+	seen := map[string]bool{}
+	for _, item := range items {
+		id := shared.StringValue(item["id"])
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		if s.itemReferencedLocked(id) {
+			continue
+		}
+		delete(s.ItemsByID, id)
+	}
+}
+
+func (s *Store) itemReferencedLocked(id string) bool {
+	for _, items := range s.ResponseInputItems {
+		if sliceHasItemID(items, id) {
+			return true
+		}
+	}
+	for _, items := range s.ResponseContextItems {
+		if sliceHasItemID(items, id) {
+			return true
+		}
+	}
+	for _, items := range s.ConversationItems {
+		if sliceHasItemID(items, id) {
+			return true
+		}
+	}
+	return false
+}
+
+func sliceHasItemID(items []shared.Map, id string) bool {
+	for _, item := range items {
+		if shared.StringValue(item["id"]) == id {
+			return true
+		}
+	}
+	return false
 }
 
 func matchesMetadata(item shared.Map, filters map[string]string) bool {

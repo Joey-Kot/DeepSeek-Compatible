@@ -18,6 +18,21 @@ if [ "$#" -eq 0 ] || [ "${1#-}" != "$1" ]; then
   if [ -n "${DEEPSEEK_HTTP_TIMEOUT:-}" ]; then
     set -- "--deepseek-http-timeout" "${DEEPSEEK_HTTP_TIMEOUT}" "$@"
   fi
+  if [ -n "${DEEPSEEK_MAX_IDLE_CONNS:-}" ]; then
+    set -- "--deepseek-max-idle-conns" "${DEEPSEEK_MAX_IDLE_CONNS}" "$@"
+  fi
+  if [ -n "${DEEPSEEK_MAX_IDLE_CONNS_PER_HOST:-}" ]; then
+    set -- "--deepseek-max-idle-conns-per-host" "${DEEPSEEK_MAX_IDLE_CONNS_PER_HOST}" "$@"
+  fi
+  if [ -n "${DEEPSEEK_MAX_CONNS_PER_HOST:-}" ]; then
+    set -- "--deepseek-max-conns-per-host" "${DEEPSEEK_MAX_CONNS_PER_HOST}" "$@"
+  fi
+  if [ -n "${READ_HEADER_TIMEOUT:-}" ]; then
+    set -- "--read-header-timeout" "${READ_HEADER_TIMEOUT}" "$@"
+  fi
+  if [ -n "${IDLE_TIMEOUT:-}" ]; then
+    set -- "--idle-timeout" "${IDLE_TIMEOUT}" "$@"
+  fi
   if [ -n "${DEEPSEEK_MODELS:-}" ]; then
     set -- "--deepseek-models" "${DEEPSEEK_MODELS}" "$@"
   fi

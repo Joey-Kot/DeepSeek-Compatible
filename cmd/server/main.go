@@ -27,11 +27,25 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	upstream := deepseek.New(cfg.DeepSeekBaseURL, cfg.DeepSeekAPIKey, cfg.DeepSeekHTTPTimeout, cfg.VerifySSL)
+	upstream := deepseek.NewWithTransportConfig(cfg.DeepSeekBaseURL, cfg.DeepSeekAPIKey, cfg.DeepSeekHTTPTimeout, cfg.VerifySSL, deepseek.TransportConfig{
+		MaxIdleConns:        cfg.DeepSeekMaxIdleConns,
+		MaxIdleConnsPerHost: cfg.DeepSeekMaxIdleConnsPerHost,
+		MaxConnsPerHost:     cfg.DeepSeekMaxConnsPerHost,
+	})
 	upstream.DebugLogBody = cfg.DebugLogBody
-	server := httpapi.New(cfg, upstream, state.New())
+	handler := httpapi.New(cfg, upstream, state.New())
+	server := newHTTPServer(cfg, handler)
 	log.Printf("listening on %s", cfg.Listen)
-	if err := http.ListenAndServe(cfg.Listen, server); err != nil {
+	if err := server.ListenAndServe(); err != nil {
 		log.Fatal(err)
+	}
+}
+
+func newHTTPServer(cfg config.Config, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              cfg.Listen,
+		Handler:           handler,
+		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
+		IdleTimeout:       cfg.IdleTimeout,
 	}
 }

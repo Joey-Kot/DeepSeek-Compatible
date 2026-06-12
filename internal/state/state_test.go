@@ -61,16 +61,25 @@ func TestResponseLifecycle(t *testing.T) {
 	if !store.DeleteResponse("resp_1") || store.DeleteResponse("resp_1") {
 		t.Fatalf("delete response returned unexpected result")
 	}
+	if item, ok := store.Item("msg_in"); ok {
+		t.Fatalf("deleted response input item still indexed: %#v", item)
+	}
+	if item, ok := store.Item("msg_out"); ok {
+		t.Fatalf("deleted response output item still indexed: %#v", item)
+	}
 }
 
-func TestUnstoredResponseStillKeepsContext(t *testing.T) {
+func TestUnstoredResponseDoesNotKeepContext(t *testing.T) {
 	store := New()
 	store.SaveResponse(shared.Map{"id": "resp_1"}, []shared.Map{{"id": "msg_in"}}, nil, false, "", nil)
 	if _, ok := store.Response("resp_1"); ok {
 		t.Fatal("response should not be stored when store=false")
 	}
-	if input, ok := store.ResponseInput("resp_1"); !ok || len(input) != 1 {
-		t.Fatalf("input context missing: %#v ok=%v", input, ok)
+	if input, ok := store.ResponseInput("resp_1"); ok || input != nil {
+		t.Fatalf("unstored response kept input context: %#v ok=%v", input, ok)
+	}
+	if item, ok := store.Item("msg_in"); ok {
+		t.Fatalf("unstored response input item still indexed: %#v", item)
 	}
 }
 
@@ -91,6 +100,59 @@ func TestConversationLifecycleAndResponseAppend(t *testing.T) {
 	}
 	if !store.DeleteConversation("conv_1") || store.DeleteConversation("conv_1") {
 		t.Fatalf("delete conversation returned unexpected result")
+	}
+	for _, id := range []string{"msg_1", "msg_in"} {
+		if item, ok := store.Item(id); ok {
+			t.Fatalf("deleted conversation item %s still indexed: %#v", id, item)
+		}
+	}
+	if _, ok := store.Item("msg_out"); !ok {
+		t.Fatal("response output item was deleted while response still references it")
+	}
+	if !store.DeleteResponse("resp_1") {
+		t.Fatal("delete response failed")
+	}
+	if item, ok := store.Item("msg_out"); ok {
+		t.Fatalf("deleted response output item still indexed: %#v", item)
+	}
+}
+
+func TestDeleteKeepsItemsReferencedElsewhere(t *testing.T) {
+	store := New()
+	sharedItem := shared.Map{"id": "msg_shared"}
+	store.SaveConversation(shared.Map{"id": "conv_1"}, []shared.Map{sharedItem})
+	store.SaveResponse(shared.Map{"id": "resp_1"}, []shared.Map{sharedItem}, nil, true, "", nil)
+
+	if !store.DeleteResponse("resp_1") {
+		t.Fatal("delete response failed")
+	}
+	if _, ok := store.Item("msg_shared"); !ok {
+		t.Fatal("shared item was deleted while conversation still references it")
+	}
+	if !store.DeleteConversation("conv_1") {
+		t.Fatal("delete conversation failed")
+	}
+	if item, ok := store.Item("msg_shared"); ok {
+		t.Fatalf("unreferenced shared item still indexed: %#v", item)
+	}
+}
+
+func TestUnstoredResponseStillAppendsConversationItems(t *testing.T) {
+	store := New()
+	store.SaveConversation(shared.Map{"id": "conv_1"}, nil)
+	store.SaveResponse(shared.Map{"id": "resp_1"}, nil, []shared.Map{{"id": "msg_out"}}, false, "conv_1", []shared.Map{{"id": "msg_in"}})
+
+	if _, ok := store.Response("resp_1"); ok {
+		t.Fatal("response should not be stored when store=false")
+	}
+	items, ok := store.ConversationItemsFor("conv_1")
+	if !ok || len(items) != 2 {
+		t.Fatalf("conversation items = %#v ok=%v", items, ok)
+	}
+	for _, id := range []string{"msg_in", "msg_out"} {
+		if _, ok := store.Item(id); !ok {
+			t.Fatalf("conversation item %s was not indexed", id)
+		}
 	}
 }
 

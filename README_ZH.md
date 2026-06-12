@@ -73,6 +73,11 @@ docker run -itd \
 | `DEEPSEEK_MODEL` | `--deepseek-model` |
 | `DEEPSEEK_MODELS` | `--deepseek-models` |
 | `DEEPSEEK_HTTP_TIMEOUT` | `--deepseek-http-timeout` |
+| `DEEPSEEK_MAX_IDLE_CONNS` | `--deepseek-max-idle-conns` |
+| `DEEPSEEK_MAX_IDLE_CONNS_PER_HOST` | `--deepseek-max-idle-conns-per-host` |
+| `DEEPSEEK_MAX_CONNS_PER_HOST` | `--deepseek-max-conns-per-host` |
+| `READ_HEADER_TIMEOUT` | `--read-header-timeout` |
+| `IDLE_TIMEOUT` | `--idle-timeout` |
 | `VERIFY_SSL` | `--verify-ssl` |
 | `DEBUG_LOG_BODY` | `--debug-log-body` |
 
@@ -87,6 +92,11 @@ docker run -itd \
 | `--deepseek-model` | 默认转发到 DeepSeek 的模型 ID，默认 `deepseek-v4-pro`。 |
 | `--deepseek-models` | `/v1/models` 对外暴露的模型 ID 列表，多个模型用逗号分隔；如果未包含默认模型，会自动把默认模型放到列表前面。 |
 | `--deepseek-http-timeout` | DeepSeek 上游 HTTP 请求超时时间，单位为秒，默认 `120`。 |
+| `--deepseek-max-idle-conns` | 上游 HTTP 空闲连接复用池总上限，默认 `200`。 |
+| `--deepseek-max-idle-conns-per-host` | 每个上游 host 保留的空闲连接上限，默认 `100`。 |
+| `--deepseek-max-conns-per-host` | 每个上游 host 的并发连接上限，默认 `0` 表示不限制。 |
+| `--read-header-timeout` | 本地 HTTP 读取请求头超时时间，单位为秒，默认 `10`。 |
+| `--idle-timeout` | 本地 HTTP 空闲连接超时时间，单位为秒，默认 `120`。 |
 | `--verify-ssl` | 是否校验 DeepSeek 上游 HTTPS 证书，默认 `true`；只有在可信代理或临时证书异常场景下才建议设为 `false`。 |
 | `--debug-log-body` | 是否输出经过脱敏的本地请求/响应 body 和 DeepSeek 上游请求/响应 body，默认 `false`；API key、token、password、secret 等字段会被替换为 `[REDACTED]`，日志长度也会被限制。 |
 
