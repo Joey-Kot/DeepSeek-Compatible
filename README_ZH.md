@@ -1,6 +1,8 @@
-# DeepSeek Compatible API 转换后端
+# DeepSeek 多协议仿真器
 
-这是一个面向 DeepSeek 的多协议兼容转换后端。它对外提供 DeepSeek Chat Completions、OpenAI Chat Completions、OpenAI Responses、Anthropic Messages 和 Gemini Generate Content 等兼容 API，并将请求尽可能完整地映射、转发到 DeepSeek Chat Completions。
+[English](README.md) | 中文
+
+这是一个面向 DeepSeek 的协议仿真器。它对外提供 DeepSeek Chat Completions、OpenAI Chat Completions、OpenAI Responses、Anthropic Messages 和 Gemini Generate Content 等兼容 API，并在 DeepSeek Chat Completions 之上尽可能高保真地仿真这些协议的请求与响应语义。
 
 本地运行时通过命令行参数进行配置，容器部署时通过环境变量进行配置。
 

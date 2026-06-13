@@ -1,6 +1,8 @@
-# DeepSeek Compatible API Translation Backend
+# DeepSeek Multi-Protocol Emulator
 
-This is a multi-protocol compatibility backend for DeepSeek. It exposes compatible APIs for DeepSeek Chat Completions, OpenAI Chat Completions, OpenAI Responses, Anthropic Messages, Gemini Generate Content, and maps requests to DeepSeek Chat Completions as completely as possible.
+English | [中文](README_ZH.md)
+
+This is a DeepSeek-focused protocol emulator. It exposes DeepSeek Chat Completions, OpenAI Chat Completions, OpenAI Responses, Anthropic Messages, and Gemini Generate Content compatible APIs, then emulates their request and response semantics on top of DeepSeek Chat Completions as faithfully as possible.
 
 It is configured with command-line flags for local runs and environment variables for container deployment.
 
