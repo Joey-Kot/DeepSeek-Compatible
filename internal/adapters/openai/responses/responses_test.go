@@ -130,3 +130,28 @@ func TestReasoningIsPreservedForToolCallContext(t *testing.T) {
 		t.Fatalf("tool calls len = %d", len(calls))
 	}
 }
+
+func TestAssistantThinkingBetweenToolCallAndOutputIsMergedIntoToolCall(t *testing.T) {
+	items := []map[string]any{
+		{"id": "fc_1", "type": "function_call", "call_id": "call_1", "name": "fn", "arguments": "{}", "status": "completed"},
+		{"type": "message", "role": "assistant", "content": []any{map[string]any{"type": "output_text", "text": "<think>I need the tool result.</think>"}}},
+		{"type": "function_call_output", "call_id": "call_1", "output": "ok"},
+	}
+
+	messages := InputItemsToChatMessages(items)
+	if len(messages) != 2 {
+		t.Fatalf("messages len = %d: %#v", len(messages), messages)
+	}
+	if got := messages[0]["role"]; got != "assistant" {
+		t.Fatalf("assistant role = %v", got)
+	}
+	if got := messages[0]["content"]; got != "" {
+		t.Fatalf("assistant content = %v", got)
+	}
+	if got := messages[0]["reasoning_content"]; got != "I need the tool result." {
+		t.Fatalf("reasoning_content = %v", got)
+	}
+	if got := messages[1]["role"]; got != "tool" {
+		t.Fatalf("tool role = %v", got)
+	}
+}

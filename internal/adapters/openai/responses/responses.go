@@ -14,6 +14,7 @@ package responses
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"deepseek-responses-compatible/internal/adapters/openai/chat"
 	"deepseek-responses-compatible/internal/adapters/openai/shared"
@@ -270,13 +271,66 @@ func InputItemsToChatMessages(items []shared.Map) []shared.Map {
 				}
 				calls = append(calls, candidate)
 			}
-			messages = append(messages, AssistantToolCallMessage(calls, ""))
+			content := ""
+			reasoning := ""
+			if companionContent, companionReasoning, ok := toolCallCompanionMessage(items, j, calls); ok {
+				content = companionContent
+				reasoning = companionReasoning
+				j++
+			}
+			messages = append(messages, AssistantToolCallMessage(calls, content, reasoning))
 			i = j - 1
 		case itemType == "function_call_output" || itemType == "custom_tool_call_output":
 			messages = append(messages, shared.Map{"role": "tool", "tool_call_id": item["call_id"], "content": shared.ContentToText(item["output"], false)})
 		}
 	}
 	return messages
+}
+
+func toolCallCompanionMessage(items []shared.Map, index int, calls []shared.Map) (string, string, bool) {
+	if index >= len(items)-1 {
+		return "", "", false
+	}
+	item := items[index]
+	itemType := shared.StringValue(item["type"])
+	if itemType != "" && itemType != "message" {
+		return "", "", false
+	}
+	if shared.StringValue(item["role"]) != "assistant" || !isOutputForAnyCall(items[index+1], calls) {
+		return "", "", false
+	}
+	content, reasoning := splitEmbeddedThinking(shared.ContentToText(item["content"], true))
+	if explicit := shared.StringValue(item["_deepseek_reasoning_content"]); explicit != "" {
+		reasoning = explicit
+	}
+	return content, reasoning, true
+}
+
+func isOutputForAnyCall(item shared.Map, calls []shared.Map) bool {
+	itemType := shared.StringValue(item["type"])
+	if itemType != "function_call_output" && itemType != "custom_tool_call_output" {
+		return false
+	}
+	callID := shared.StringValue(item["call_id"])
+	for _, call := range calls {
+		if callID != "" && callID == shared.StringValue(call["call_id"]) {
+			return true
+		}
+	}
+	return false
+}
+
+func splitEmbeddedThinking(text string) (string, string) {
+	const openTag = "<think>"
+	const closeTag = "</think>"
+	start := strings.Index(text, openTag)
+	end := strings.Index(text, closeTag)
+	if start < 0 || end < start {
+		return text, ""
+	}
+	reasoning := text[start+len(openTag) : end]
+	content := text[:start] + text[end+len(closeTag):]
+	return content, reasoning
 }
 
 func ResponseMessageToChatMessage(item shared.Map) shared.Map {
