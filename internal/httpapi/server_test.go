@@ -90,6 +90,37 @@ func TestCreateResponseEndpointStoresAndRetrieves(t *testing.T) {
 	}
 }
 
+func TestMemoryHealthRequiresAuthAndReportsStoreStats(t *testing.T) {
+	server := testServer(fakeUpstream{})
+	server.store.SaveResponse(shared.Map{"id": "resp_1"}, []shared.Map{{"id": "msg_1"}}, nil, true, "", nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/health/memory", nil)
+	rec := httptest.NewRecorder()
+	server.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthorized status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	rec = request(server, http.MethodGet, "/health/memory", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var data map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &data); err != nil {
+		t.Fatal(err)
+	}
+	storeData, ok := data["store"].(map[string]any)
+	if !ok {
+		t.Fatalf("store stats missing: %#v", data)
+	}
+	if storeData["responses"] != float64(1) || storeData["items"] != float64(1) {
+		t.Fatalf("store stats = %#v", storeData)
+	}
+	if _, ok := data["goroutines"].(float64); !ok {
+		t.Fatalf("goroutines missing: %#v", data)
+	}
+}
+
 func TestStreamResponseMapsReasoningSummary(t *testing.T) {
 	server := testServer(fakeUpstream{streamFn: func(payload shared.Map, handle func(shared.Map) error) error {
 		if payload["stream"] != true {
@@ -347,6 +378,27 @@ func TestDebugLogBodyLogsRedactedRequestAndResponse(t *testing.T) {
 	}
 	if !strings.Contains(text, `"api_key":"[REDACTED]"`) || !strings.Contains(text, `"content":"Hi!"`) {
 		t.Fatalf("debug logs = %s", text)
+	}
+}
+
+func TestReadJSONRejectsRequestBodyOverLimit(t *testing.T) {
+	server := New(config.Config{
+		APITokens:           []string{"sk-test"},
+		DefaultModel:        "deepseek-v4-pro",
+		ModelIDs:            []string{"deepseek-v4-pro"},
+		DeepSeekBaseURL:     "https://api.deepseek.com",
+		MaxRequestBodyBytes: 8,
+	}, fakeUpstream{chatFn: func(shared.Map) (shared.Map, error) {
+		t.Fatal("upstream should not be called for oversized request")
+		return nil, nil
+	}}, state.New())
+
+	rec := request(server, http.MethodPost, "/v1/chat/completions", `{"model":"deepseek-v4-pro"}`)
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "Request body is too large") {
+		t.Fatalf("body=%s", rec.Body.String())
 	}
 }
 

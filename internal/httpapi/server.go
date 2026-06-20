@@ -21,6 +21,7 @@ import (
 	"log"
 	"net/http"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -87,6 +88,10 @@ func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.authorize(w, r) {
+		return
+	}
+	if r.URL.Path == "/health/memory" {
+		s.handleMemoryHealth(w, r)
 		return
 	}
 
@@ -235,6 +240,26 @@ func (s *Server) handleModels(w http.ResponseWriter, _ *http.Request) {
 		data = append(data, shared.Map{"id": model, "object": "model", "owned_by": "deepseek"})
 	}
 	writeJSON(w, http.StatusOK, shared.Map{"object": "list", "data": data})
+}
+
+func (s *Server) handleMemoryHealth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	var mem runtime.MemStats
+	runtime.ReadMemStats(&mem)
+	storeStats := s.store.Stats()
+	writeJSON(w, http.StatusOK, shared.Map{
+		"alloc":        mem.Alloc,
+		"heap_alloc":   mem.HeapAlloc,
+		"heap_inuse":   mem.HeapInuse,
+		"sys":          mem.Sys,
+		"num_gc":       mem.NumGC,
+		"goroutines":   runtime.NumGoroutine(),
+		"store":        storeStats,
+		"store_limits": shared.Map{"responses": s.cfg.StoreMaxResponses, "chat_completions": s.cfg.StoreMaxChatCompletions, "conversations": s.cfg.StoreMaxConversations},
+	})
 }
 
 func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
@@ -765,12 +790,18 @@ func (s *Server) streamResponse(w http.ResponseWriter, r *http.Request, payload 
 					textOutputIndex = 1
 				}
 				item := responses.ReasoningSummaryItem("", reasoningID, "in_progress")
-				_ = sse.Event(w, "response.output_item.added", shared.Map{"type": "response.output_item.added", "output_index": reasoningOutputIndex, "item": item})
+				if err := sse.Event(w, "response.output_item.added", shared.Map{"type": "response.output_item.added", "output_index": reasoningOutputIndex, "item": item}); err != nil {
+					return err
+				}
 				part := shared.Map{"type": "summary_text", "text": ""}
-				_ = sse.Event(w, "response.reasoning_summary_part.added", shared.Map{"type": "response.reasoning_summary_part.added", "item_id": reasoningID, "output_index": reasoningOutputIndex, "summary_index": 0, "part": part})
+				if err := sse.Event(w, "response.reasoning_summary_part.added", shared.Map{"type": "response.reasoning_summary_part.added", "item_id": reasoningID, "output_index": reasoningOutputIndex, "summary_index": 0, "part": part}); err != nil {
+					return err
+				}
 			}
 			reasoning += dr
-			_ = sse.Event(w, "response.reasoning_summary_text.delta", shared.Map{"type": "response.reasoning_summary_text.delta", "item_id": reasoningID, "output_index": reasoningOutputIndex, "summary_index": 0, "delta": dr})
+			if err := sse.Event(w, "response.reasoning_summary_text.delta", shared.Map{"type": "response.reasoning_summary_text.delta", "item_id": reasoningID, "output_index": reasoningOutputIndex, "summary_index": 0, "delta": dr}); err != nil {
+				return err
+			}
 		}
 		if dt := shared.StringValue(delta["content"]); dt != "" {
 			if !textStarted {
@@ -779,12 +810,18 @@ func (s *Server) streamResponse(w http.ResponseWriter, r *http.Request, payload 
 					textOutputIndex = 1
 				}
 				item := shared.Map{"id": messageID, "type": "message", "status": "in_progress", "role": "assistant", "content": []any{}}
-				_ = sse.Event(w, "response.output_item.added", shared.Map{"type": "response.output_item.added", "output_index": textOutputIndex, "item": item})
+				if err := sse.Event(w, "response.output_item.added", shared.Map{"type": "response.output_item.added", "output_index": textOutputIndex, "item": item}); err != nil {
+					return err
+				}
 				part := shared.Map{"type": "output_text", "text": "", "annotations": []any{}}
-				_ = sse.Event(w, "response.content_part.added", shared.Map{"type": "response.content_part.added", "item_id": messageID, "output_index": textOutputIndex, "content_index": 0, "part": part})
+				if err := sse.Event(w, "response.content_part.added", shared.Map{"type": "response.content_part.added", "item_id": messageID, "output_index": textOutputIndex, "content_index": 0, "part": part}); err != nil {
+					return err
+				}
 			}
 			content += dt
-			_ = sse.Event(w, "response.output_text.delta", shared.Map{"type": "response.output_text.delta", "item_id": messageID, "output_index": textOutputIndex, "content_index": 0, "delta": dt})
+			if err := sse.Event(w, "response.output_text.delta", shared.Map{"type": "response.output_text.delta", "item_id": messageID, "output_index": textOutputIndex, "content_index": 0, "delta": dt}); err != nil {
+				return err
+			}
 			if flusher != nil {
 				flusher.Flush()
 			}
@@ -886,8 +923,17 @@ func (s *Server) readJSON(w http.ResponseWriter, r *http.Request, optional bool)
 		return shared.Map{}, true
 	}
 	defer r.Body.Close()
-	body, err := io.ReadAll(r.Body)
+	reader := io.Reader(r.Body)
+	if s.cfg.MaxRequestBodyBytes > 0 {
+		reader = http.MaxBytesReader(w, r.Body, s.cfg.MaxRequestBodyBytes)
+	}
+	body, err := io.ReadAll(reader)
 	if err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			openAIError(w, http.StatusRequestEntityTooLarge, "Request body is too large", "invalid_request_error", "")
+			return nil, false
+		}
 		openAIError(w, http.StatusBadRequest, "Request body could not be read", "invalid_request_error", "")
 		return nil, false
 	}

@@ -137,6 +137,88 @@ func TestDeleteKeepsItemsReferencedElsewhere(t *testing.T) {
 	}
 }
 
+func TestResponseLimitEvictsOldestAndUnreferencedItems(t *testing.T) {
+	store := NewWithLimits(Limits{MaxResponses: 1})
+	store.SaveResponse(shared.Map{"id": "resp_1"}, []shared.Map{{"id": "msg_1"}}, nil, true, "", nil)
+	store.SaveResponse(shared.Map{"id": "resp_2"}, []shared.Map{{"id": "msg_2"}}, nil, true, "", nil)
+
+	if _, ok := store.Response("resp_1"); ok {
+		t.Fatal("oldest response was not evicted")
+	}
+	if _, ok := store.Response("resp_2"); !ok {
+		t.Fatal("newest response was not retained")
+	}
+	if item, ok := store.Item("msg_1"); ok {
+		t.Fatalf("evicted response item still indexed: %#v", item)
+	}
+	if _, ok := store.Item("msg_2"); !ok {
+		t.Fatal("retained response item was not indexed")
+	}
+}
+
+func TestConversationLimitEvictsOldestAndKeepsSharedItems(t *testing.T) {
+	store := NewWithLimits(Limits{MaxConversations: 1})
+	sharedItem := shared.Map{"id": "msg_shared"}
+	store.SaveResponse(shared.Map{"id": "resp_1"}, []shared.Map{sharedItem}, nil, true, "", nil)
+	store.SaveConversation(shared.Map{"id": "conv_1"}, []shared.Map{sharedItem, shared.Map{"id": "msg_conv_1"}})
+	store.SaveConversation(shared.Map{"id": "conv_2"}, []shared.Map{{"id": "msg_conv_2"}})
+
+	if _, ok := store.Conversation("conv_1"); ok {
+		t.Fatal("oldest conversation was not evicted")
+	}
+	if _, ok := store.Conversation("conv_2"); !ok {
+		t.Fatal("newest conversation was not retained")
+	}
+	if _, ok := store.Item("msg_shared"); !ok {
+		t.Fatal("shared item was deleted while response still references it")
+	}
+	if item, ok := store.Item("msg_conv_1"); ok {
+		t.Fatalf("unshared evicted conversation item still indexed: %#v", item)
+	}
+}
+
+func TestChatCompletionLimitEvictsOldest(t *testing.T) {
+	store := NewWithLimits(Limits{MaxChatCompletions: 1})
+	store.SaveChatCompletion(shared.Map{"id": "chat_1"}, []shared.Map{{"id": "msg_1"}})
+	store.SaveChatCompletion(shared.Map{"id": "chat_2"}, []shared.Map{{"id": "msg_2"}})
+
+	if _, ok := store.ChatCompletion("chat_1"); ok {
+		t.Fatal("oldest chat completion was not evicted")
+	}
+	if _, ok := store.ChatCompletion("chat_2"); !ok {
+		t.Fatal("newest chat completion was not retained")
+	}
+	if messages, ok := store.ChatCompletionMessagesFor("chat_1"); ok || messages != nil {
+		t.Fatalf("evicted chat messages still available: %#v ok=%v", messages, ok)
+	}
+}
+
+func TestZeroLimitsKeepUnlimitedBehavior(t *testing.T) {
+	store := NewWithLimits(Limits{})
+	store.SaveResponse(shared.Map{"id": "resp_1"}, nil, nil, true, "", nil)
+	store.SaveResponse(shared.Map{"id": "resp_2"}, nil, nil, true, "", nil)
+	store.SaveConversation(shared.Map{"id": "conv_1"}, nil)
+	store.SaveConversation(shared.Map{"id": "conv_2"}, nil)
+	store.SaveChatCompletion(shared.Map{"id": "chat_1"}, nil)
+	store.SaveChatCompletion(shared.Map{"id": "chat_2"}, nil)
+
+	for _, id := range []string{"resp_1", "resp_2"} {
+		if _, ok := store.Response(id); !ok {
+			t.Fatalf("response %s should be retained", id)
+		}
+	}
+	for _, id := range []string{"conv_1", "conv_2"} {
+		if _, ok := store.Conversation(id); !ok {
+			t.Fatalf("conversation %s should be retained", id)
+		}
+	}
+	for _, id := range []string{"chat_1", "chat_2"} {
+		if _, ok := store.ChatCompletion(id); !ok {
+			t.Fatalf("chat completion %s should be retained", id)
+		}
+	}
+}
+
 func TestUnstoredResponseStillAppendsConversationItems(t *testing.T) {
 	store := New()
 	store.SaveConversation(shared.Map{"id": "conv_1"}, nil)

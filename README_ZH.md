@@ -78,6 +78,10 @@ docker run -itd \
 | `DEEPSEEK_MAX_IDLE_CONNS` | `--deepseek-max-idle-conns` |
 | `DEEPSEEK_MAX_IDLE_CONNS_PER_HOST` | `--deepseek-max-idle-conns-per-host` |
 | `DEEPSEEK_MAX_CONNS_PER_HOST` | `--deepseek-max-conns-per-host` |
+| `STORE_MAX_RESPONSES` | `--store-max-responses` |
+| `STORE_MAX_CHAT_COMPLETIONS` | `--store-max-chat-completions` |
+| `STORE_MAX_CONVERSATIONS` | `--store-max-conversations` |
+| `MAX_REQUEST_BODY_BYTES` | `--max-request-body-bytes` |
 | `READ_HEADER_TIMEOUT` | `--read-header-timeout` |
 | `IDLE_TIMEOUT` | `--idle-timeout` |
 | `VERIFY_SSL` | `--verify-ssl` |
@@ -97,6 +101,10 @@ docker run -itd \
 | `--deepseek-max-idle-conns` | 上游 HTTP 空闲连接复用池总上限，默认 `200`。 |
 | `--deepseek-max-idle-conns-per-host` | 每个上游 host 保留的空闲连接上限，默认 `100`。 |
 | `--deepseek-max-conns-per-host` | 每个上游 host 的并发连接上限，默认 `0` 表示不限制。 |
+| `--store-max-responses` | 本地最多保存的 OpenAI Responses 数量，默认 `1000`；`0` 表示不限制。 |
+| `--store-max-chat-completions` | 本地最多保存的 OpenAI Chat Completions 数量，默认 `1000`；`0` 表示不限制。 |
+| `--store-max-conversations` | 本地最多保存的 OpenAI Conversations 数量，默认 `1000`；`0` 表示不限制。 |
+| `--max-request-body-bytes` | 本地请求体大小上限，单位为字节，默认 `33554432`；`0` 表示不限制。 |
 | `--read-header-timeout` | 本地 HTTP 读取请求头超时时间，单位为秒，默认 `10`。 |
 | `--idle-timeout` | 本地 HTTP 空闲连接超时时间，单位为秒，默认 `120`。 |
 | `--verify-ssl` | 是否校验 DeepSeek 上游 HTTPS 证书，默认 `true`；只有在可信代理或临时证书异常场景下才建议设为 `false`。 |
@@ -170,6 +178,7 @@ NOTICE：针对 Codex CLI 的 MCP namespace 工具调用，Responses 适配器�
 | --- | --- |
 | `GET /v1/models` | 返回当前暴露给兼容客户端的模型列表。 |
 | `GET /health` | 健康检查端点。 |
+| `GET /health/memory` | 需要鉴权的内存与本地状态统计端点。 |
 
 ## 参数映射
 

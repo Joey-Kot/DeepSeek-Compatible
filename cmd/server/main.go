@@ -32,8 +32,14 @@ func main() {
 		MaxIdleConnsPerHost: cfg.DeepSeekMaxIdleConnsPerHost,
 		MaxConnsPerHost:     cfg.DeepSeekMaxConnsPerHost,
 	})
+	defer upstream.CloseIdleConnections()
 	upstream.DebugLogBody = cfg.DebugLogBody
-	handler := httpapi.New(cfg, upstream, state.New())
+	store := state.NewWithLimits(state.Limits{
+		MaxResponses:       cfg.StoreMaxResponses,
+		MaxChatCompletions: cfg.StoreMaxChatCompletions,
+		MaxConversations:   cfg.StoreMaxConversations,
+	})
+	handler := httpapi.New(cfg, upstream, store)
 	server := newHTTPServer(cfg, handler)
 	log.Printf("listening on %s", cfg.Listen)
 	if err := server.ListenAndServe(); err != nil {

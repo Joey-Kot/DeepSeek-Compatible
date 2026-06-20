@@ -28,9 +28,35 @@ type Store struct {
 	Conversations          map[string]shared.Map
 	ConversationItems      map[string][]shared.Map
 	ItemsByID              map[string]shared.Map
+
+	limits              Limits
+	responseOrder       []string
+	chatCompletionOrder []string
+	conversationOrder   []string
+}
+
+type Limits struct {
+	MaxResponses       int
+	MaxChatCompletions int
+	MaxConversations   int
+}
+
+type Stats struct {
+	Responses              int `json:"responses"`
+	ResponseInputItems     int `json:"response_input_items"`
+	ResponseContextItems   int `json:"response_context_items"`
+	ChatCompletions        int `json:"chat_completions"`
+	ChatCompletionMessages int `json:"chat_completion_messages"`
+	Conversations          int `json:"conversations"`
+	ConversationItems      int `json:"conversation_items"`
+	Items                  int `json:"items"`
 }
 
 func New() *Store {
+	return NewWithLimits(Limits{})
+}
+
+func NewWithLimits(limits Limits) *Store {
 	return &Store{
 		Responses:              map[string]shared.Map{},
 		ResponseInputItems:     map[string][]shared.Map{},
@@ -40,6 +66,7 @@ func New() *Store {
 		Conversations:          map[string]shared.Map{},
 		ConversationItems:      map[string][]shared.Map{},
 		ItemsByID:              map[string]shared.Map{},
+		limits:                 limits,
 	}
 }
 
@@ -47,6 +74,21 @@ func (s *Store) RegisterItems(items []shared.Map) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.registerItemsLocked(items)
+}
+
+func (s *Store) Stats() Stats {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return Stats{
+		Responses:              len(s.Responses),
+		ResponseInputItems:     len(s.ResponseInputItems),
+		ResponseContextItems:   len(s.ResponseContextItems),
+		ChatCompletions:        len(s.ChatCompletions),
+		ChatCompletionMessages: len(s.ChatCompletionMessages),
+		Conversations:          len(s.Conversations),
+		ConversationItems:      len(s.ConversationItems),
+		Items:                  len(s.ItemsByID),
+	}
 }
 
 func (s *Store) registerItemsLocked(items []shared.Map) {
@@ -83,6 +125,8 @@ func (s *Store) SaveResponse(response shared.Map, contextItems, outputItems []sh
 		s.registerItemsLocked(contextItems)
 		s.registerItemsLocked(outputItems)
 		s.Responses[responseID] = shared.CloneMap(response)
+		s.responseOrder = rememberID(s.responseOrder, responseID)
+		s.evictResponsesLocked()
 	}
 	if conversationID != "" {
 		items := s.ConversationItems[conversationID]
@@ -96,6 +140,10 @@ func (s *Store) SaveResponse(response shared.Map, contextItems, outputItems []sh
 func (s *Store) DeleteResponse(id string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.deleteResponseLocked(id)
+}
+
+func (s *Store) deleteResponseLocked(id string) bool {
 	if _, ok := s.Responses[id]; !ok {
 		return false
 	}
@@ -103,6 +151,7 @@ func (s *Store) DeleteResponse(id string) bool {
 	delete(s.Responses, id)
 	delete(s.ResponseInputItems, id)
 	delete(s.ResponseContextItems, id)
+	s.responseOrder = removeID(s.responseOrder, id)
 	s.deleteUnreferencedItemsLocked(items)
 	return true
 }
@@ -139,6 +188,8 @@ func (s *Store) SaveChatCompletion(completion shared.Map, messages []shared.Map)
 	id := shared.StringValue(completion["id"])
 	s.ChatCompletions[id] = shared.CloneMap(completion)
 	s.ChatCompletionMessages[id] = shared.CloneSlice(messages)
+	s.chatCompletionOrder = rememberID(s.chatCompletionOrder, id)
+	s.evictChatCompletionsLocked()
 }
 
 func (s *Store) ChatCompletion(id string) (shared.Map, bool) {
@@ -194,11 +245,16 @@ func (s *Store) UpdateChatCompletion(id string, metadata any) (shared.Map, bool)
 func (s *Store) DeleteChatCompletion(id string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.deleteChatCompletionLocked(id)
+}
+
+func (s *Store) deleteChatCompletionLocked(id string) bool {
 	if _, ok := s.ChatCompletions[id]; !ok {
 		return false
 	}
 	delete(s.ChatCompletions, id)
 	delete(s.ChatCompletionMessages, id)
+	s.chatCompletionOrder = removeID(s.chatCompletionOrder, id)
 	return true
 }
 
@@ -209,6 +265,8 @@ func (s *Store) SaveConversation(conversation shared.Map, items []shared.Map) {
 	s.Conversations[id] = shared.CloneMap(conversation)
 	s.ConversationItems[id] = shared.CloneSlice(items)
 	s.registerItemsLocked(items)
+	s.conversationOrder = rememberID(s.conversationOrder, id)
+	s.evictConversationsLocked()
 }
 
 func (s *Store) Conversation(id string) (shared.Map, bool) {
@@ -247,14 +305,40 @@ func (s *Store) UpdateConversation(id string, metadata any) (shared.Map, bool) {
 func (s *Store) DeleteConversation(id string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.deleteConversationLocked(id)
+}
+
+func (s *Store) deleteConversationLocked(id string) bool {
 	if _, ok := s.Conversations[id]; !ok {
 		return false
 	}
 	items := shared.CloneSlice(s.ConversationItems[id])
 	delete(s.Conversations, id)
 	delete(s.ConversationItems, id)
+	s.conversationOrder = removeID(s.conversationOrder, id)
 	s.deleteUnreferencedItemsLocked(items)
 	return true
+}
+
+func (s *Store) evictResponsesLocked() {
+	for s.limits.MaxResponses > 0 && len(s.Responses) > s.limits.MaxResponses && len(s.responseOrder) > 0 {
+		id := s.responseOrder[0]
+		s.deleteResponseLocked(id)
+	}
+}
+
+func (s *Store) evictChatCompletionsLocked() {
+	for s.limits.MaxChatCompletions > 0 && len(s.ChatCompletions) > s.limits.MaxChatCompletions && len(s.chatCompletionOrder) > 0 {
+		id := s.chatCompletionOrder[0]
+		s.deleteChatCompletionLocked(id)
+	}
+}
+
+func (s *Store) evictConversationsLocked() {
+	for s.limits.MaxConversations > 0 && len(s.Conversations) > s.limits.MaxConversations && len(s.conversationOrder) > 0 {
+		id := s.conversationOrder[0]
+		s.deleteConversationLocked(id)
+	}
 }
 
 func (s *Store) deleteUnreferencedItemsLocked(items []shared.Map) {
@@ -298,6 +382,27 @@ func sliceHasItemID(items []shared.Map, id string) bool {
 		}
 	}
 	return false
+}
+
+func rememberID(order []string, id string) []string {
+	if id == "" {
+		return order
+	}
+	for _, existing := range order {
+		if existing == id {
+			return order
+		}
+	}
+	return append(order, id)
+}
+
+func removeID(order []string, id string) []string {
+	for i, existing := range order {
+		if existing == id {
+			return append(order[:i], order[i+1:]...)
+		}
+	}
+	return order
 }
 
 func matchesMetadata(item shared.Map, filters map[string]string) bool {

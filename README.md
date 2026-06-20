@@ -77,6 +77,10 @@ Container environment reference:
 | `DEEPSEEK_MAX_IDLE_CONNS` | `--deepseek-max-idle-conns` |
 | `DEEPSEEK_MAX_IDLE_CONNS_PER_HOST` | `--deepseek-max-idle-conns-per-host` |
 | `DEEPSEEK_MAX_CONNS_PER_HOST` | `--deepseek-max-conns-per-host` |
+| `STORE_MAX_RESPONSES` | `--store-max-responses` |
+| `STORE_MAX_CHAT_COMPLETIONS` | `--store-max-chat-completions` |
+| `STORE_MAX_CONVERSATIONS` | `--store-max-conversations` |
+| `MAX_REQUEST_BODY_BYTES` | `--max-request-body-bytes` |
 | `READ_HEADER_TIMEOUT` | `--read-header-timeout` |
 | `IDLE_TIMEOUT` | `--idle-timeout` |
 | `VERIFY_SSL` | `--verify-ssl` |
@@ -96,6 +100,10 @@ Flag reference:
 | `--deepseek-max-idle-conns` | Maximum idle upstream HTTP connections kept for reuse. Defaults to `200`. |
 | `--deepseek-max-idle-conns-per-host` | Maximum idle upstream HTTP connections kept per host. Defaults to `100`. |
 | `--deepseek-max-conns-per-host` | Maximum concurrent upstream HTTP connections per host. Defaults to `0`, which means unlimited. |
+| `--store-max-responses` | Maximum locally stored OpenAI Responses. Defaults to `1000`; `0` means unlimited. |
+| `--store-max-chat-completions` | Maximum locally stored OpenAI Chat Completions. Defaults to `1000`; `0` means unlimited. |
+| `--store-max-conversations` | Maximum locally stored OpenAI Conversations. Defaults to `1000`; `0` means unlimited. |
+| `--max-request-body-bytes` | Maximum local request body size in bytes. Defaults to `33554432`; `0` means unlimited. |
 | `--read-header-timeout` | Local HTTP read header timeout in seconds. Defaults to `10`. |
 | `--idle-timeout` | Local HTTP idle connection timeout in seconds. Defaults to `120`. |
 | `--verify-ssl` | Whether to verify the DeepSeek upstream HTTPS certificate. Defaults to `true`; set to `false` only for trusted proxies or temporary certificate problems. |
@@ -169,6 +177,7 @@ NOTICE: For Codex CLI MCP namespace tool calls, the Responses adapter expands na
 | --- | --- |
 | `GET /v1/models` | Return the model list exposed to compatible clients. |
 | `GET /health` | Health check endpoint. |
+| `GET /health/memory` | Authenticated memory and in-memory store statistics endpoint. |
 
 ## Parameter Mapping
 

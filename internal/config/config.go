@@ -34,6 +34,10 @@ type Config struct {
 	DeepSeekMaxIdleConns        int
 	DeepSeekMaxIdleConnsPerHost int
 	DeepSeekMaxConnsPerHost     int
+	StoreMaxResponses           int
+	StoreMaxChatCompletions     int
+	StoreMaxConversations       int
+	MaxRequestBodyBytes         int64
 	ReadHeaderTimeout           time.Duration
 	IdleTimeout                 time.Duration
 	DebugLogBody                bool
@@ -51,6 +55,10 @@ func Parse(args []string) (Config, error) {
 	cfg := Config{
 		DeepSeekMaxIdleConns:        200,
 		DeepSeekMaxIdleConnsPerHost: 100,
+		StoreMaxResponses:           1000,
+		StoreMaxChatCompletions:     1000,
+		StoreMaxConversations:       1000,
+		MaxRequestBodyBytes:         32 << 20,
 		VerifySSL:                   true,
 	}
 
@@ -64,6 +72,10 @@ func Parse(args []string) (Config, error) {
 	fs.IntVar(&cfg.DeepSeekMaxIdleConns, "deepseek-max-idle-conns", cfg.DeepSeekMaxIdleConns, "maximum idle upstream HTTP connections")
 	fs.IntVar(&cfg.DeepSeekMaxIdleConnsPerHost, "deepseek-max-idle-conns-per-host", cfg.DeepSeekMaxIdleConnsPerHost, "maximum idle upstream HTTP connections per host")
 	fs.IntVar(&cfg.DeepSeekMaxConnsPerHost, "deepseek-max-conns-per-host", 0, "maximum upstream HTTP connections per host; 0 means unlimited")
+	fs.IntVar(&cfg.StoreMaxResponses, "store-max-responses", cfg.StoreMaxResponses, "maximum locally stored Responses; 0 means unlimited")
+	fs.IntVar(&cfg.StoreMaxChatCompletions, "store-max-chat-completions", cfg.StoreMaxChatCompletions, "maximum locally stored Chat Completions; 0 means unlimited")
+	fs.IntVar(&cfg.StoreMaxConversations, "store-max-conversations", cfg.StoreMaxConversations, "maximum locally stored Conversations; 0 means unlimited")
+	fs.Int64Var(&cfg.MaxRequestBodyBytes, "max-request-body-bytes", cfg.MaxRequestBodyBytes, "maximum local request body size in bytes; 0 means unlimited")
 	fs.Float64Var(&readHeaderTimeoutSeconds, "read-header-timeout", 10, "local HTTP read header timeout in seconds")
 	fs.Float64Var(&idleTimeoutSeconds, "idle-timeout", 120, "local HTTP idle timeout in seconds")
 	fs.BoolVar(&cfg.DebugLogBody, "debug-log-body", false, "log redacted request/response bodies")
@@ -97,6 +109,18 @@ func Parse(args []string) (Config, error) {
 	}
 	if cfg.DeepSeekMaxConnsPerHost < 0 {
 		return Config{}, fmt.Errorf("--deepseek-max-conns-per-host must be non-negative")
+	}
+	if cfg.StoreMaxResponses < 0 {
+		return Config{}, fmt.Errorf("--store-max-responses must be non-negative")
+	}
+	if cfg.StoreMaxChatCompletions < 0 {
+		return Config{}, fmt.Errorf("--store-max-chat-completions must be non-negative")
+	}
+	if cfg.StoreMaxConversations < 0 {
+		return Config{}, fmt.Errorf("--store-max-conversations must be non-negative")
+	}
+	if cfg.MaxRequestBodyBytes < 0 {
+		return Config{}, fmt.Errorf("--max-request-body-bytes must be non-negative")
 	}
 	if readHeaderTimeoutSeconds <= 0 {
 		return Config{}, fmt.Errorf("--read-header-timeout must be positive")

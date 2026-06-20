@@ -8,6 +8,10 @@
 --deepseek-max-idle-conns 200
 --deepseek-max-idle-conns-per-host 100
 --deepseek-max-conns-per-host 0
+--store-max-responses 1000
+--store-max-chat-completions 1000
+--store-max-conversations 1000
+--max-request-body-bytes 33554432
 --read-header-timeout 10
 --idle-timeout 120
 --verify-ssl=true

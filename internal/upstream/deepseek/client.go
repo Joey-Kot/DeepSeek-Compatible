@@ -58,6 +58,12 @@ func NewWithTransportConfig(baseURL, apiKey string, timeout time.Duration, verif
 	return &Client{BaseURL: baseURL, APIKey: apiKey, Timeout: timeout, HTTPClient: newHTTPClient(timeout, verifySSL, transportConfig)}
 }
 
+func (c *Client) CloseIdleConnections() {
+	if c.HTTPClient != nil {
+		c.HTTPClient.CloseIdleConnections()
+	}
+}
+
 func (c *Client) Chat(ctx context.Context, payload shared.Map) (shared.Map, error) {
 	req, err := c.newRequest(ctx, payload)
 	if err != nil {
