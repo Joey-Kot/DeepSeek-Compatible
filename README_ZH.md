@@ -78,6 +78,7 @@ docker run -itd \
 | `DEEPSEEK_MAX_IDLE_CONNS` | `--deepseek-max-idle-conns` |
 | `DEEPSEEK_MAX_IDLE_CONNS_PER_HOST` | `--deepseek-max-idle-conns-per-host` |
 | `DEEPSEEK_MAX_CONNS_PER_HOST` | `--deepseek-max-conns-per-host` |
+| `DEEPSEEK_MAX_RESPONSE_BODY_BYTES` | `--deepseek-max-response-body-bytes` |
 | `STORE_MAX_RESPONSES` | `--store-max-responses` |
 | `STORE_MAX_CHAT_COMPLETIONS` | `--store-max-chat-completions` |
 | `STORE_MAX_CONVERSATIONS` | `--store-max-conversations` |
@@ -104,6 +105,7 @@ docker run -itd \
 | `--deepseek-max-idle-conns` | 上游 HTTP 空闲连接复用池总上限，默认 `200`。 |
 | `--deepseek-max-idle-conns-per-host` | 每个上游 host 保留的空闲连接上限，默认 `100`。 |
 | `--deepseek-max-conns-per-host` | 每个上游 host 的并发连接上限，默认 `0` 表示不限制。 |
+| `--deepseek-max-response-body-bytes` | DeepSeek 上游响应体大小上限，单位为字节，默认 `33554432`；`0` 表示不限制。 |
 | `--store-max-responses` | 本地最多保存的 OpenAI Responses 数量，默认 `1000`；`0` 表示不限制。 |
 | `--store-max-chat-completions` | 本地最多保存的 OpenAI Chat Completions 数量，默认 `1000`；`0` 表示不限制。 |
 | `--store-max-conversations` | 本地最多保存的 OpenAI Conversations 数量，默认 `1000`；`0` 表示不限制。 |
@@ -432,7 +434,7 @@ curl http://localhost:8080/v1/responses \
 | `--store-max-conversations` | `1000` | 最多保留 Conversations 条目数；设为 `0` 关闭该上限。 |
 | `--store-prune-interval` | `60` | 请求路径上两次清理检查的最小间隔秒数。 |
 
-超过容量上限时按保存顺序淘汰旧条目；淘汰 Response 或 Conversation 时会同步清理不再被任何对象引用的 `ItemsByID` 条目。请求体默认限制为 `--max-request-body-bytes 16777216`，设为 `0` 可关闭限制。
+超过容量上限时按保存顺序淘汰旧条目；淘汰 Response 或 Conversation 时会同步清理不再被任何对象引用的 `ItemsByID` 条目。请求体默认限制为 `--max-request-body-bytes 16777216`，DeepSeek 上游响应体默认限制为 `--deepseek-max-response-body-bytes 33554432`；对应值设为 `0` 可关闭该限制。
 
 可用下面的端点观察内存曲线和 Store 数量：
 

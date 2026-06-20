@@ -29,11 +29,12 @@ import (
 )
 
 type Client struct {
-	BaseURL      string
-	APIKey       string
-	Timeout      time.Duration
-	DebugLogBody bool
-	HTTPClient   *http.Client
+	BaseURL              string
+	APIKey               string
+	Timeout              time.Duration
+	MaxResponseBodyBytes int64
+	DebugLogBody         bool
+	HTTPClient           *http.Client
 }
 
 type TransportConfig struct {
@@ -55,7 +56,13 @@ func New(baseURL, apiKey string, timeout time.Duration, verifySSL bool) *Client 
 }
 
 func NewWithTransportConfig(baseURL, apiKey string, timeout time.Duration, verifySSL bool, transportConfig TransportConfig) *Client {
-	return &Client{BaseURL: baseURL, APIKey: apiKey, Timeout: timeout, HTTPClient: newHTTPClient(timeout, verifySSL, transportConfig)}
+	return &Client{
+		BaseURL:              baseURL,
+		APIKey:               apiKey,
+		Timeout:              timeout,
+		MaxResponseBodyBytes: 32 << 20,
+		HTTPClient:           newHTTPClient(timeout, verifySSL, transportConfig),
+	}
 }
 
 func (c *Client) CloseIdleConnections() {
@@ -79,7 +86,7 @@ func (c *Client) Chat(ctx context.Context, payload shared.Map) (shared.Map, erro
 		return nil, fmt.Errorf("external DeepSeek request failed: %w", err)
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	body, err := c.readResponseBody(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +120,10 @@ func (c *Client) StreamChat(ctx context.Context, payload shared.Map, handle func
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
-		body, _ := io.ReadAll(resp.Body)
+		body, err := c.readResponseBody(resp.Body)
+		if err != nil {
+			return err
+		}
 		if c.DebugLogBody {
 			log.Printf("debug body deepseek stream error status=%d body=%s", resp.StatusCode, debuglog.Body(body))
 		}
@@ -122,7 +132,7 @@ func (c *Client) StreamChat(ctx context.Context, payload shared.Map, handle func
 		return HTTPError{StatusCode: resp.StatusCode, Message: deepseekErrorMessage(data, string(body))}
 	}
 
-	scanner := bufio.NewScanner(resp.Body)
+	scanner := bufio.NewScanner(c.responseBodyReader(resp.Body))
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -177,6 +187,56 @@ func (c *Client) httpClient() *http.Client {
 		return c.HTTPClient
 	}
 	return &http.Client{Timeout: c.Timeout}
+}
+
+func (c *Client) readResponseBody(reader io.Reader) ([]byte, error) {
+	if c.MaxResponseBodyBytes <= 0 {
+		return io.ReadAll(reader)
+	}
+	limited := io.LimitReader(reader, c.MaxResponseBodyBytes+1)
+	body, err := io.ReadAll(limited)
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(body)) > c.MaxResponseBodyBytes {
+		return nil, responseTooLargeError()
+	}
+	return body, nil
+}
+
+func (c *Client) responseBodyReader(reader io.Reader) io.Reader {
+	if c.MaxResponseBodyBytes <= 0 {
+		return reader
+	}
+	return &maxBytesReader{reader: reader, max: c.MaxResponseBodyBytes}
+}
+
+type maxBytesReader struct {
+	reader io.Reader
+	max    int64
+	read   int64
+}
+
+func (r *maxBytesReader) Read(p []byte) (int, error) {
+	remaining := r.max - r.read
+	if remaining < 0 {
+		return 0, responseTooLargeError()
+	}
+	limit := remaining + 1
+	if int64(len(p)) > limit {
+		p = p[:limit]
+	}
+	n, err := r.reader.Read(p)
+	if int64(n) > remaining {
+		r.read = r.max + 1
+		return 0, responseTooLargeError()
+	}
+	r.read += int64(n)
+	return n, err
+}
+
+func responseTooLargeError() error {
+	return HTTPError{StatusCode: http.StatusBadGateway, Message: "DeepSeek response body is too large"}
 }
 
 func newHTTPClient(timeout time.Duration, verifySSL bool, config TransportConfig) *http.Client {

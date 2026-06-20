@@ -32,6 +32,7 @@ func main() {
 		MaxIdleConnsPerHost: cfg.DeepSeekMaxIdleConnsPerHost,
 		MaxConnsPerHost:     cfg.DeepSeekMaxConnsPerHost,
 	})
+	upstream.MaxResponseBodyBytes = cfg.DeepSeekMaxResponseBodyBytes
 	defer upstream.CloseIdleConnections()
 	upstream.DebugLogBody = cfg.DebugLogBody
 	store := state.NewWithLimits(state.Limits{

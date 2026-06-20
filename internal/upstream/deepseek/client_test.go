@@ -112,6 +112,74 @@ func TestChatRejectsNonJSONSuccess(t *testing.T) {
 	}
 }
 
+func TestChatRejectsOversizedResponseBody(t *testing.T) {
+	client := New("https://deepseek.test", "sk-upstream", time.Second, true)
+	client.MaxResponseBodyBytes = 8
+	client.HTTPClient = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusOK, `{"id":"too-large"}`), nil
+	})}
+	_, err := client.Chat(context.Background(), shared.Map{})
+	var httpErr HTTPError
+	if !errors.As(err, &httpErr) || httpErr.StatusCode != http.StatusBadGateway {
+		t.Fatalf("error = %#v", err)
+	}
+	if !strings.Contains(httpErr.Message, "too large") {
+		t.Fatalf("message = %q", httpErr.Message)
+	}
+}
+
+func TestChatAllowsUnlimitedResponseBody(t *testing.T) {
+	client := New("https://deepseek.test", "sk-upstream", time.Second, true)
+	client.MaxResponseBodyBytes = 0
+	client.HTTPClient = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusOK, `{"id":"allowed"}`), nil
+	})}
+	response, err := client.Chat(context.Background(), shared.Map{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response["id"] != "allowed" {
+		t.Fatalf("response = %#v", response)
+	}
+}
+
+func TestStreamChatRejectsOversizedErrorResponseBody(t *testing.T) {
+	client := New("https://deepseek.test", "sk-upstream", time.Second, true)
+	client.MaxResponseBodyBytes = 8
+	client.HTTPClient = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusBadGateway, `{"error":{"message":"too much"}}`), nil
+	})}
+	err := client.StreamChat(context.Background(), shared.Map{"stream": true}, func(shared.Map) error {
+		t.Fatal("handler should not be called")
+		return nil
+	})
+	var httpErr HTTPError
+	if !errors.As(err, &httpErr) || httpErr.StatusCode != http.StatusBadGateway {
+		t.Fatalf("error = %#v", err)
+	}
+	if !strings.Contains(httpErr.Message, "too large") {
+		t.Fatalf("message = %q", httpErr.Message)
+	}
+}
+
+func TestStreamChatRejectsOversizedSuccessResponseBody(t *testing.T) {
+	client := New("https://deepseek.test", "sk-upstream", time.Second, true)
+	client.MaxResponseBodyBytes = 16
+	client.HTTPClient = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return textResponse(http.StatusOK, "data: {\"id\":\"chunk_1\"}\n\ndata: {\"id\":\"chunk_2\"}\n\n"), nil
+	})}
+	err := client.StreamChat(context.Background(), shared.Map{"stream": true}, func(shared.Map) error {
+		return nil
+	})
+	var httpErr HTTPError
+	if !errors.As(err, &httpErr) || httpErr.StatusCode != http.StatusBadGateway {
+		t.Fatalf("error = %#v", err)
+	}
+	if !strings.Contains(httpErr.Message, "too large") {
+		t.Fatalf("message = %q", httpErr.Message)
+	}
+}
+
 func TestDebugLogBodyLogsRedactedUpstreamBodies(t *testing.T) {
 	var logs bytes.Buffer
 	previousOutput := log.Writer()

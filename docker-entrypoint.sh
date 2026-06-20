@@ -30,6 +30,9 @@ if [ "$#" -eq 0 ] || [ "${1#-}" != "$1" ]; then
   if [ -n "${DEEPSEEK_MAX_CONNS_PER_HOST:-}" ]; then
     set -- "--deepseek-max-conns-per-host" "${DEEPSEEK_MAX_CONNS_PER_HOST}" "$@"
   fi
+  if [ -n "${DEEPSEEK_MAX_RESPONSE_BODY_BYTES:-}" ]; then
+    set -- "--deepseek-max-response-body-bytes" "${DEEPSEEK_MAX_RESPONSE_BODY_BYTES}" "$@"
+  fi
   if [ -n "${STORE_MAX_RESPONSES:-}" ]; then
     set -- "--store-max-responses" "${STORE_MAX_RESPONSES}" "$@"
   fi

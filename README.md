@@ -77,6 +77,7 @@ Container environment reference:
 | `DEEPSEEK_MAX_IDLE_CONNS` | `--deepseek-max-idle-conns` |
 | `DEEPSEEK_MAX_IDLE_CONNS_PER_HOST` | `--deepseek-max-idle-conns-per-host` |
 | `DEEPSEEK_MAX_CONNS_PER_HOST` | `--deepseek-max-conns-per-host` |
+| `DEEPSEEK_MAX_RESPONSE_BODY_BYTES` | `--deepseek-max-response-body-bytes` |
 | `STORE_MAX_RESPONSES` | `--store-max-responses` |
 | `STORE_MAX_CHAT_COMPLETIONS` | `--store-max-chat-completions` |
 | `STORE_MAX_CONVERSATIONS` | `--store-max-conversations` |
@@ -103,6 +104,7 @@ Flag reference:
 | `--deepseek-max-idle-conns` | Maximum idle upstream HTTP connections kept for reuse. Defaults to `200`. |
 | `--deepseek-max-idle-conns-per-host` | Maximum idle upstream HTTP connections kept per host. Defaults to `100`. |
 | `--deepseek-max-conns-per-host` | Maximum concurrent upstream HTTP connections per host. Defaults to `0`, which means unlimited. |
+| `--deepseek-max-response-body-bytes` | Maximum DeepSeek upstream response body size in bytes. Defaults to `33554432`; `0` means unlimited. |
 | `--store-max-responses` | Maximum locally stored OpenAI Responses. Defaults to `1000`; `0` means unlimited. |
 | `--store-max-chat-completions` | Maximum locally stored OpenAI Chat Completions. Defaults to `1000`; `0` means unlimited. |
 | `--store-max-conversations` | Maximum locally stored OpenAI Conversations. Defaults to `1000`; `0` means unlimited. |
@@ -431,7 +433,7 @@ Local `store=true` Responses, Chat Completions, and Conversations are kept in me
 | `--store-max-conversations` | `1000` | Maximum retained Conversations entries; set to `0` to disable this limit. |
 | `--store-prune-interval` | `60` | Minimum seconds between request-path prune checks. |
 
-When a capacity limit is exceeded, older entries are evicted in save order. Evicting a Response or Conversation also removes `ItemsByID` entries that are no longer referenced by any object. Request bodies are limited by `--max-request-body-bytes 16777216` by default; set it to `0` to disable the limit.
+When a capacity limit is exceeded, older entries are evicted in save order. Evicting a Response or Conversation also removes `ItemsByID` entries that are no longer referenced by any object. Request bodies are limited by `--max-request-body-bytes 16777216` by default, and DeepSeek upstream response bodies are limited by `--deepseek-max-response-body-bytes 33554432`; set either value to `0` to disable that limit.
 
 Use this endpoint to observe memory trends and Store counts:
 

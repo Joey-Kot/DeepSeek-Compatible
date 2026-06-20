@@ -24,27 +24,28 @@ const (
 )
 
 type Config struct {
-	Listen                      string
-	APITokens                   []string
-	DeepSeekAPIKey              string
-	DeepSeekBaseURL             string
-	DefaultModel                string
-	ModelIDs                    []string
-	DeepSeekHTTPTimeout         time.Duration
-	DeepSeekMaxIdleConns        int
-	DeepSeekMaxIdleConnsPerHost int
-	DeepSeekMaxConnsPerHost     int
-	StoreMaxResponses           int
-	StoreMaxChatCompletions     int
-	StoreMaxConversations       int
-	StoreTTL                    time.Duration
-	StorePruneInterval          time.Duration
-	MaxRequestBodyBytes         int64
-	ReadHeaderTimeout           time.Duration
-	IdleTimeout                 time.Duration
-	DebugPprof                  bool
-	DebugLogBody                bool
-	VerifySSL                   bool
+	Listen                       string
+	APITokens                    []string
+	DeepSeekAPIKey               string
+	DeepSeekBaseURL              string
+	DefaultModel                 string
+	ModelIDs                     []string
+	DeepSeekHTTPTimeout          time.Duration
+	DeepSeekMaxIdleConns         int
+	DeepSeekMaxIdleConnsPerHost  int
+	DeepSeekMaxConnsPerHost      int
+	DeepSeekMaxResponseBodyBytes int64
+	StoreMaxResponses            int
+	StoreMaxChatCompletions      int
+	StoreMaxConversations        int
+	StoreTTL                     time.Duration
+	StorePruneInterval           time.Duration
+	MaxRequestBodyBytes          int64
+	ReadHeaderTimeout            time.Duration
+	IdleTimeout                  time.Duration
+	DebugPprof                   bool
+	DebugLogBody                 bool
+	VerifySSL                    bool
 }
 
 func Parse(args []string) (Config, error) {
@@ -58,15 +59,16 @@ func Parse(args []string) (Config, error) {
 	var readHeaderTimeoutSeconds float64
 	var idleTimeoutSeconds float64
 	cfg := Config{
-		DeepSeekMaxIdleConns:        200,
-		DeepSeekMaxIdleConnsPerHost: 100,
-		StoreMaxResponses:           1000,
-		StoreMaxChatCompletions:     1000,
-		StoreMaxConversations:       1000,
-		StoreTTL:                    time.Hour,
-		StorePruneInterval:          time.Minute,
-		MaxRequestBodyBytes:         16 << 20,
-		VerifySSL:                   true,
+		DeepSeekMaxIdleConns:         200,
+		DeepSeekMaxIdleConnsPerHost:  100,
+		DeepSeekMaxResponseBodyBytes: 32 << 20,
+		StoreMaxResponses:            1000,
+		StoreMaxChatCompletions:      1000,
+		StoreMaxConversations:        1000,
+		StoreTTL:                     time.Hour,
+		StorePruneInterval:           time.Minute,
+		MaxRequestBodyBytes:          16 << 20,
+		VerifySSL:                    true,
 	}
 
 	fs.StringVar(&cfg.Listen, "listen", ":8080", "HTTP listen address")
@@ -79,6 +81,7 @@ func Parse(args []string) (Config, error) {
 	fs.IntVar(&cfg.DeepSeekMaxIdleConns, "deepseek-max-idle-conns", cfg.DeepSeekMaxIdleConns, "maximum idle upstream HTTP connections")
 	fs.IntVar(&cfg.DeepSeekMaxIdleConnsPerHost, "deepseek-max-idle-conns-per-host", cfg.DeepSeekMaxIdleConnsPerHost, "maximum idle upstream HTTP connections per host")
 	fs.IntVar(&cfg.DeepSeekMaxConnsPerHost, "deepseek-max-conns-per-host", 0, "maximum upstream HTTP connections per host; 0 means unlimited")
+	fs.Int64Var(&cfg.DeepSeekMaxResponseBodyBytes, "deepseek-max-response-body-bytes", cfg.DeepSeekMaxResponseBodyBytes, "maximum DeepSeek upstream response body size in bytes; 0 means unlimited")
 	fs.IntVar(&cfg.StoreMaxResponses, "store-max-responses", cfg.StoreMaxResponses, "maximum locally stored Responses; 0 means unlimited")
 	fs.IntVar(&cfg.StoreMaxChatCompletions, "store-max-chat-completions", cfg.StoreMaxChatCompletions, "maximum locally stored Chat Completions; 0 means unlimited")
 	fs.IntVar(&cfg.StoreMaxConversations, "store-max-conversations", cfg.StoreMaxConversations, "maximum locally stored Conversations; 0 means unlimited")
@@ -119,6 +122,9 @@ func Parse(args []string) (Config, error) {
 	}
 	if cfg.DeepSeekMaxConnsPerHost < 0 {
 		return Config{}, fmt.Errorf("--deepseek-max-conns-per-host must be non-negative")
+	}
+	if cfg.DeepSeekMaxResponseBodyBytes < 0 {
+		return Config{}, fmt.Errorf("--deepseek-max-response-body-bytes must be non-negative")
 	}
 	if cfg.StoreMaxResponses < 0 {
 		return Config{}, fmt.Errorf("--store-max-responses must be non-negative")

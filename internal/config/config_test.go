@@ -46,6 +46,9 @@ func TestParseDefaults(t *testing.T) {
 	if cfg.DeepSeekMaxConnsPerHost != 0 {
 		t.Fatalf("DeepSeekMaxConnsPerHost = %d", cfg.DeepSeekMaxConnsPerHost)
 	}
+	if cfg.DeepSeekMaxResponseBodyBytes != 32<<20 {
+		t.Fatalf("DeepSeekMaxResponseBodyBytes = %d", cfg.DeepSeekMaxResponseBodyBytes)
+	}
 	if cfg.StoreMaxResponses != 1000 {
 		t.Fatalf("StoreMaxResponses = %d", cfg.StoreMaxResponses)
 	}
@@ -87,6 +90,7 @@ func TestParseCommandLineFlags(t *testing.T) {
 		"--deepseek-max-idle-conns", "300",
 		"--deepseek-max-idle-conns-per-host", "150",
 		"--deepseek-max-conns-per-host", "80",
+		"--deepseek-max-response-body-bytes", "2048",
 		"--store-max-responses", "11",
 		"--store-max-chat-completions", "12",
 		"--store-max-conversations", "13",
@@ -122,6 +126,9 @@ func TestParseCommandLineFlags(t *testing.T) {
 	}
 	if cfg.DeepSeekMaxConnsPerHost != 80 {
 		t.Fatalf("DeepSeekMaxConnsPerHost = %d", cfg.DeepSeekMaxConnsPerHost)
+	}
+	if cfg.DeepSeekMaxResponseBodyBytes != 2048 {
+		t.Fatalf("DeepSeekMaxResponseBodyBytes = %d", cfg.DeepSeekMaxResponseBodyBytes)
 	}
 	if cfg.StoreMaxResponses != 11 {
 		t.Fatalf("StoreMaxResponses = %d", cfg.StoreMaxResponses)
@@ -175,7 +182,7 @@ func TestParseRejectsNonPositiveTimeout(t *testing.T) {
 }
 
 func TestParseRejectsInvalidConnectionLimits(t *testing.T) {
-	for _, flag := range []string{"--deepseek-max-idle-conns", "--deepseek-max-idle-conns-per-host", "--deepseek-max-conns-per-host"} {
+	for _, flag := range []string{"--deepseek-max-idle-conns", "--deepseek-max-idle-conns-per-host", "--deepseek-max-conns-per-host", "--deepseek-max-response-body-bytes"} {
 		if _, err := Parse([]string{flag, "-1"}); err == nil {
 			t.Fatalf("expected error for %s", flag)
 		}

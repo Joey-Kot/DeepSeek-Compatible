@@ -8,6 +8,7 @@
 --deepseek-max-idle-conns 200
 --deepseek-max-idle-conns-per-host 100
 --deepseek-max-conns-per-host 0
+--deepseek-max-response-body-bytes 33554432
 --store-max-responses 1000
 --store-max-chat-completions 1000
 --store-max-conversations 1000
