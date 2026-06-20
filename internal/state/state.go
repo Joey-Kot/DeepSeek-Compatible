@@ -13,6 +13,7 @@ package state
 
 import (
 	"sync"
+	"time"
 
 	"deepseek-responses-compatible/internal/adapters/openai/shared"
 )
@@ -29,16 +30,21 @@ type Store struct {
 	ConversationItems      map[string][]shared.Map
 	ItemsByID              map[string]shared.Map
 
-	limits              Limits
-	responseOrder       []string
-	chatCompletionOrder []string
-	conversationOrder   []string
+	limits                 Limits
+	responseOrder          []string
+	chatCompletionOrder    []string
+	conversationOrder      []string
+	responseAccessedAt     map[string]time.Time
+	chatAccessedAt         map[string]time.Time
+	conversationAccessedAt map[string]time.Time
+	lastPrunedAt           time.Time
 }
 
 type Limits struct {
 	MaxResponses       int
 	MaxChatCompletions int
 	MaxConversations   int
+	TTL                time.Duration
 }
 
 type Stats struct {
@@ -67,6 +73,9 @@ func NewWithLimits(limits Limits) *Store {
 		ConversationItems:      map[string][]shared.Map{},
 		ItemsByID:              map[string]shared.Map{},
 		limits:                 limits,
+		responseAccessedAt:     map[string]time.Time{},
+		chatAccessedAt:         map[string]time.Time{},
+		conversationAccessedAt: map[string]time.Time{},
 	}
 }
 
@@ -91,6 +100,47 @@ func (s *Store) Stats() Stats {
 	}
 }
 
+func (s *Store) PruneExpired(now time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.pruneExpiredLocked(now)
+}
+
+func (s *Store) MaybePrune(now time.Time, interval time.Duration) {
+	if s.limits.TTL <= 0 || interval <= 0 {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.lastPrunedAt.IsZero() && now.Sub(s.lastPrunedAt) < interval {
+		return
+	}
+	s.lastPrunedAt = now
+	s.pruneExpiredLocked(now)
+}
+
+func (s *Store) pruneExpiredLocked(now time.Time) {
+	if s.limits.TTL <= 0 {
+		return
+	}
+	cutoff := now.Add(-s.limits.TTL)
+	for id, accessedAt := range s.responseAccessedAt {
+		if !accessedAt.After(cutoff) {
+			s.deleteResponseLocked(id)
+		}
+	}
+	for id, accessedAt := range s.chatAccessedAt {
+		if !accessedAt.After(cutoff) {
+			s.deleteChatCompletionLocked(id)
+		}
+	}
+	for id, accessedAt := range s.conversationAccessedAt {
+		if !accessedAt.After(cutoff) {
+			s.deleteConversationLocked(id)
+		}
+	}
+}
+
 func (s *Store) registerItemsLocked(items []shared.Map) {
 	for _, item := range items {
 		id := shared.StringValue(item["id"])
@@ -108,9 +158,12 @@ func (s *Store) Item(id string) (shared.Map, bool) {
 }
 
 func (s *Store) Response(id string) (shared.Map, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	item, ok := s.Responses[id]
+	if ok {
+		s.touchResponseLocked(id)
+	}
 	return shared.CloneMap(item), ok
 }
 
@@ -125,6 +178,7 @@ func (s *Store) SaveResponse(response shared.Map, contextItems, outputItems []sh
 		s.registerItemsLocked(contextItems)
 		s.registerItemsLocked(outputItems)
 		s.Responses[responseID] = shared.CloneMap(response)
+		s.responseAccessedAt[responseID] = time.Now()
 		s.responseOrder = rememberID(s.responseOrder, responseID)
 		s.evictResponsesLocked()
 	}
@@ -151,22 +205,29 @@ func (s *Store) deleteResponseLocked(id string) bool {
 	delete(s.Responses, id)
 	delete(s.ResponseInputItems, id)
 	delete(s.ResponseContextItems, id)
+	delete(s.responseAccessedAt, id)
 	s.responseOrder = removeID(s.responseOrder, id)
 	s.deleteUnreferencedItemsLocked(items)
 	return true
 }
 
 func (s *Store) ResponseInput(id string) ([]shared.Map, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	items, ok := s.ResponseInputItems[id]
+	if ok {
+		s.touchResponseLocked(id)
+	}
 	return shared.CloneSlice(items), ok
 }
 
 func (s *Store) ResponseContext(id string) ([]shared.Map, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	items, ok := s.ResponseContextItems[id]
+	if ok {
+		s.touchResponseLocked(id)
+	}
 	return shared.CloneSlice(items), ok
 }
 
@@ -177,6 +238,7 @@ func (s *Store) UpdateResponse(id string, fn func(shared.Map) shared.Map) (share
 	if !ok {
 		return nil, false
 	}
+	s.touchResponseLocked(id)
 	updated := fn(shared.CloneMap(item))
 	s.Responses[id] = shared.CloneMap(updated)
 	return shared.CloneMap(updated), true
@@ -188,23 +250,28 @@ func (s *Store) SaveChatCompletion(completion shared.Map, messages []shared.Map)
 	id := shared.StringValue(completion["id"])
 	s.ChatCompletions[id] = shared.CloneMap(completion)
 	s.ChatCompletionMessages[id] = shared.CloneSlice(messages)
+	s.chatAccessedAt[id] = time.Now()
 	s.chatCompletionOrder = rememberID(s.chatCompletionOrder, id)
 	s.evictChatCompletionsLocked()
 }
 
 func (s *Store) ChatCompletion(id string) (shared.Map, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	item, ok := s.ChatCompletions[id]
+	if ok {
+		s.touchChatCompletionLocked(id)
+	}
 	return shared.CloneMap(item), ok
 }
 
 func (s *Store) ChatCompletionMessagesFor(id string) ([]shared.Map, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if _, ok := s.ChatCompletions[id]; !ok {
 		return nil, false
 	}
+	s.touchChatCompletionLocked(id)
 	return shared.CloneSlice(s.ChatCompletionMessages[id]), true
 }
 
@@ -232,6 +299,7 @@ func (s *Store) UpdateChatCompletion(id string, metadata any) (shared.Map, bool)
 	if !ok {
 		return nil, false
 	}
+	s.touchChatCompletionLocked(id)
 	completion = shared.CloneMap(completion)
 	if metadata == nil {
 		completion["metadata"] = shared.Map{}
@@ -254,6 +322,7 @@ func (s *Store) deleteChatCompletionLocked(id string) bool {
 	}
 	delete(s.ChatCompletions, id)
 	delete(s.ChatCompletionMessages, id)
+	delete(s.chatAccessedAt, id)
 	s.chatCompletionOrder = removeID(s.chatCompletionOrder, id)
 	return true
 }
@@ -265,23 +334,28 @@ func (s *Store) SaveConversation(conversation shared.Map, items []shared.Map) {
 	s.Conversations[id] = shared.CloneMap(conversation)
 	s.ConversationItems[id] = shared.CloneSlice(items)
 	s.registerItemsLocked(items)
+	s.conversationAccessedAt[id] = time.Now()
 	s.conversationOrder = rememberID(s.conversationOrder, id)
 	s.evictConversationsLocked()
 }
 
 func (s *Store) Conversation(id string) (shared.Map, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	item, ok := s.Conversations[id]
+	if ok {
+		s.touchConversationLocked(id)
+	}
 	return shared.CloneMap(item), ok
 }
 
 func (s *Store) ConversationItemsFor(id string) ([]shared.Map, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if _, ok := s.Conversations[id]; !ok {
 		return nil, false
 	}
+	s.touchConversationLocked(id)
 	return shared.CloneSlice(s.ConversationItems[id]), true
 }
 
@@ -292,6 +366,7 @@ func (s *Store) UpdateConversation(id string, metadata any) (shared.Map, bool) {
 	if !ok {
 		return nil, false
 	}
+	s.touchConversationLocked(id)
 	conversation = shared.CloneMap(conversation)
 	if metadata == nil {
 		conversation["metadata"] = shared.Map{}
@@ -315,9 +390,28 @@ func (s *Store) deleteConversationLocked(id string) bool {
 	items := shared.CloneSlice(s.ConversationItems[id])
 	delete(s.Conversations, id)
 	delete(s.ConversationItems, id)
+	delete(s.conversationAccessedAt, id)
 	s.conversationOrder = removeID(s.conversationOrder, id)
 	s.deleteUnreferencedItemsLocked(items)
 	return true
+}
+
+func (s *Store) touchResponseLocked(id string) {
+	if _, ok := s.responseAccessedAt[id]; ok {
+		s.responseAccessedAt[id] = time.Now()
+	}
+}
+
+func (s *Store) touchChatCompletionLocked(id string) {
+	if _, ok := s.chatAccessedAt[id]; ok {
+		s.chatAccessedAt[id] = time.Now()
+	}
+}
+
+func (s *Store) touchConversationLocked(id string) {
+	if _, ok := s.conversationAccessedAt[id]; ok {
+		s.conversationAccessedAt[id] = time.Now()
+	}
 }
 
 func (s *Store) evictResponsesLocked() {

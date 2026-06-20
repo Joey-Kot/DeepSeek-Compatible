@@ -80,10 +80,13 @@ Container environment reference:
 | `STORE_MAX_RESPONSES` | `--store-max-responses` |
 | `STORE_MAX_CHAT_COMPLETIONS` | `--store-max-chat-completions` |
 | `STORE_MAX_CONVERSATIONS` | `--store-max-conversations` |
+| `STORE_TTL` | `--store-ttl` |
+| `STORE_PRUNE_INTERVAL` | `--store-prune-interval` |
 | `MAX_REQUEST_BODY_BYTES` | `--max-request-body-bytes` |
 | `READ_HEADER_TIMEOUT` | `--read-header-timeout` |
 | `IDLE_TIMEOUT` | `--idle-timeout` |
 | `VERIFY_SSL` | `--verify-ssl` |
+| `DEBUG_PPROF` | `--debug-pprof` |
 | `DEBUG_LOG_BODY` | `--debug-log-body` |
 
 Flag reference:
@@ -103,10 +106,13 @@ Flag reference:
 | `--store-max-responses` | Maximum locally stored OpenAI Responses. Defaults to `1000`; `0` means unlimited. |
 | `--store-max-chat-completions` | Maximum locally stored OpenAI Chat Completions. Defaults to `1000`; `0` means unlimited. |
 | `--store-max-conversations` | Maximum locally stored OpenAI Conversations. Defaults to `1000`; `0` means unlimited. |
-| `--max-request-body-bytes` | Maximum local request body size in bytes. Defaults to `33554432`; `0` means unlimited. |
+| `--store-ttl` | Local store TTL in seconds after last access. Defaults to `3600`; `0` disables TTL. |
+| `--store-prune-interval` | Minimum interval between request-path store prune checks in seconds. Defaults to `60`; `0` disables request-path pruning. |
+| `--max-request-body-bytes` | Maximum local request body size in bytes. Defaults to `16777216`; `0` means unlimited. |
 | `--read-header-timeout` | Local HTTP read header timeout in seconds. Defaults to `10`. |
 | `--idle-timeout` | Local HTTP idle connection timeout in seconds. Defaults to `120`. |
 | `--verify-ssl` | Whether to verify the DeepSeek upstream HTTPS certificate. Defaults to `true`; set to `false` only for trusted proxies or temporary certificate problems. |
+| `--debug-pprof` | Whether to enable authenticated `/debug/pprof/` and `/debug/vars` debug endpoints. Defaults to `false`. |
 | `--debug-log-body` | Whether to log redacted local request/response bodies and DeepSeek upstream request/response bodies. Defaults to `false`; API keys, tokens, passwords, secrets, and similar fields are replaced with `[REDACTED]`, and log length is capped. |
 
 See `args.example` for the full flag set.
@@ -412,6 +418,29 @@ curl http://localhost:8080/v1/responses \
 ## Compatibility Notes
 
 This backend stores Responses and Conversations state in memory to support compatibility features such as `previous_response_id`, `conversation`, retrieval, deletion, and input item listing. Without external storage, this local state is lost after service restart.
+
+### In-Memory Store Reclamation
+
+Local `store=true` Responses, Chat Completions, and Conversations are kept in memory. By default, request handling periodically prunes this store explicitly instead of relying on goroutine cleanup:
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--store-ttl` | `3600` | Seconds to keep an entry after its most recent access; set to `0` to disable TTL. |
+| `--store-max-responses` | `1000` | Maximum retained Responses entries; set to `0` to disable this limit. |
+| `--store-max-chat-completions` | `1000` | Maximum retained Chat Completions entries; set to `0` to disable this limit. |
+| `--store-max-conversations` | `1000` | Maximum retained Conversations entries; set to `0` to disable this limit. |
+| `--store-prune-interval` | `60` | Minimum seconds between request-path prune checks. |
+
+When a capacity limit is exceeded, older entries are evicted in save order. Evicting a Response or Conversation also removes `ItemsByID` entries that are no longer referenced by any object. Request bodies are limited by `--max-request-body-bytes 16777216` by default; set it to `0` to disable the limit.
+
+Use this endpoint to observe memory trends and Store counts:
+
+```bash
+curl -H "Authorization: Bearer sk-local-test" \
+  http://127.0.0.1:8080/healthz/memory
+```
+
+For pprof, explicitly enable `--debug-pprof=true`, then access the authenticated `/debug/pprof/` and `/debug/vars` endpoints. Debug endpoints are not exposed by default.
 
 DeepSeek Chat Completions does not provide a server-side token counting endpoint, so this backend embeds the official DeepSeek tokenizer and provides local token counting for the OpenAI Responses, Anthropic Messages, and Gemini Generate Content token counting endpoints.
 

@@ -17,13 +17,16 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"expvar"
 	"io"
 	"log"
 	"net/http"
+	"net/http/pprof"
 	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	anthropic "deepseek-responses-compatible/internal/adapters/anthropic/messages"
 	gemini "deepseek-responses-compatible/internal/adapters/gemini/generate"
@@ -79,6 +82,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	s.setCommonHeaders(w)
+	s.store.MaybePrune(time.Now(), s.cfg.StorePruneInterval)
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -90,8 +94,11 @@ func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	if !s.authorize(w, r) {
 		return
 	}
-	if r.URL.Path == "/health/memory" {
+	if r.URL.Path == "/health/memory" || r.URL.Path == "/healthz/memory" {
 		s.handleMemoryHealth(w, r)
+		return
+	}
+	if s.handleDebug(w, r) {
 		return
 	}
 
@@ -258,8 +265,39 @@ func (s *Server) handleMemoryHealth(w http.ResponseWriter, r *http.Request) {
 		"num_gc":       mem.NumGC,
 		"goroutines":   runtime.NumGoroutine(),
 		"store":        storeStats,
-		"store_limits": shared.Map{"responses": s.cfg.StoreMaxResponses, "chat_completions": s.cfg.StoreMaxChatCompletions, "conversations": s.cfg.StoreMaxConversations},
+		"store_limits": shared.Map{"responses": s.cfg.StoreMaxResponses, "chat_completions": s.cfg.StoreMaxChatCompletions, "conversations": s.cfg.StoreMaxConversations, "ttl_seconds": s.cfg.StoreTTL.Seconds(), "prune_interval_seconds": s.cfg.StorePruneInterval.Seconds()},
 	})
+}
+
+func (s *Server) handleDebug(w http.ResponseWriter, r *http.Request) bool {
+	if !s.cfg.DebugPprof {
+		return false
+	}
+	switch {
+	case r.URL.Path == "/debug/vars":
+		expvar.Handler().ServeHTTP(w, r)
+		return true
+	case r.URL.Path == "/debug/pprof/" || r.URL.Path == "/debug/pprof":
+		pprof.Index(w, r)
+		return true
+	case strings.HasPrefix(r.URL.Path, "/debug/pprof/cmdline"):
+		pprof.Cmdline(w, r)
+		return true
+	case strings.HasPrefix(r.URL.Path, "/debug/pprof/profile"):
+		pprof.Profile(w, r)
+		return true
+	case strings.HasPrefix(r.URL.Path, "/debug/pprof/symbol"):
+		pprof.Symbol(w, r)
+		return true
+	case strings.HasPrefix(r.URL.Path, "/debug/pprof/trace"):
+		pprof.Trace(w, r)
+		return true
+	case strings.HasPrefix(r.URL.Path, "/debug/pprof/"):
+		pprof.Index(w, r)
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {

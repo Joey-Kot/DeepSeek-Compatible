@@ -81,10 +81,13 @@ docker run -itd \
 | `STORE_MAX_RESPONSES` | `--store-max-responses` |
 | `STORE_MAX_CHAT_COMPLETIONS` | `--store-max-chat-completions` |
 | `STORE_MAX_CONVERSATIONS` | `--store-max-conversations` |
+| `STORE_TTL` | `--store-ttl` |
+| `STORE_PRUNE_INTERVAL` | `--store-prune-interval` |
 | `MAX_REQUEST_BODY_BYTES` | `--max-request-body-bytes` |
 | `READ_HEADER_TIMEOUT` | `--read-header-timeout` |
 | `IDLE_TIMEOUT` | `--idle-timeout` |
 | `VERIFY_SSL` | `--verify-ssl` |
+| `DEBUG_PPROF` | `--debug-pprof` |
 | `DEBUG_LOG_BODY` | `--debug-log-body` |
 
 参数说明：
@@ -104,10 +107,13 @@ docker run -itd \
 | `--store-max-responses` | 本地最多保存的 OpenAI Responses 数量，默认 `1000`；`0` 表示不限制。 |
 | `--store-max-chat-completions` | 本地最多保存的 OpenAI Chat Completions 数量，默认 `1000`；`0` 表示不限制。 |
 | `--store-max-conversations` | 本地最多保存的 OpenAI Conversations 数量，默认 `1000`；`0` 表示不限制。 |
-| `--max-request-body-bytes` | 本地请求体大小上限，单位为字节，默认 `33554432`；`0` 表示不限制。 |
+| `--store-ttl` | 本地状态最近访问后保留时间，单位为秒，默认 `3600`；`0` 表示关闭 TTL。 |
+| `--store-prune-interval` | 请求路径上两次本地状态清理检查的最小间隔，单位为秒，默认 `60`；`0` 表示关闭请求路径清理。 |
+| `--max-request-body-bytes` | 本地请求体大小上限，单位为字节，默认 `16777216`；`0` 表示不限制。 |
 | `--read-header-timeout` | 本地 HTTP 读取请求头超时时间，单位为秒，默认 `10`。 |
 | `--idle-timeout` | 本地 HTTP 空闲连接超时时间，单位为秒，默认 `120`。 |
 | `--verify-ssl` | 是否校验 DeepSeek 上游 HTTPS 证书，默认 `true`；只有在可信代理或临时证书异常场景下才建议设为 `false`。 |
+| `--debug-pprof` | 是否启用已鉴权的 `/debug/pprof/` 和 `/debug/vars` 调试端点，默认 `false`。 |
 | `--debug-log-body` | 是否输出经过脱敏的本地请求/响应 body 和 DeepSeek 上游请求/响应 body，默认 `false`；API key、token、password、secret 等字段会被替换为 `[REDACTED]`，日志长度也会被限制。 |
 
 完整参数可以参考 `args.example`。
@@ -413,6 +419,29 @@ curl http://localhost:8080/v1/responses \
 ## 兼容性说明
 
 本后端会在内存中保存 Responses 和 Conversations 状态，用于支持 `previous_response_id`、`conversation`、读取、删除和输入项列表等兼容能力。如果没有接入外部存储，服务重启后这些本地状态会丢失。
+
+### 内存 Store 回收
+
+本地 `store=true` 的 Responses、Chat Completions 和 Conversations 会保存在内存中。默认配置会在请求路径上定期主动清理，不依赖 goroutine 自动回收：
+
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
+| `--store-ttl` | `3600` | 条目最近访问后保留秒数；设为 `0` 关闭 TTL。 |
+| `--store-max-responses` | `1000` | 最多保留 Responses 条目数；设为 `0` 关闭该上限。 |
+| `--store-max-chat-completions` | `1000` | 最多保留 Chat Completions 条目数；设为 `0` 关闭该上限。 |
+| `--store-max-conversations` | `1000` | 最多保留 Conversations 条目数；设为 `0` 关闭该上限。 |
+| `--store-prune-interval` | `60` | 请求路径上两次清理检查的最小间隔秒数。 |
+
+超过容量上限时按保存顺序淘汰旧条目；淘汰 Response 或 Conversation 时会同步清理不再被任何对象引用的 `ItemsByID` 条目。请求体默认限制为 `--max-request-body-bytes 16777216`，设为 `0` 可关闭限制。
+
+可用下面的端点观察内存曲线和 Store 数量：
+
+```bash
+curl -H "Authorization: Bearer sk-local-test" \
+  http://127.0.0.1:8080/healthz/memory
+```
+
+如需 pprof，可显式启用 `--debug-pprof=true`，然后访问已鉴权的 `/debug/pprof/`、`/debug/vars`。默认不会裸露调试端点。
 
 DeepSeek Chat Completions 暂未提供服务端 token counting 端点，因此本后端内置 DeepSeek 官方 tokenizer，在本地为 OpenAI Responses、Anthropic Messages 和 Gemini Generate Content 的 token 计算端点提供统计能力。
 

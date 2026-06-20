@@ -38,6 +38,7 @@ func main() {
 		MaxResponses:       cfg.StoreMaxResponses,
 		MaxChatCompletions: cfg.StoreMaxChatCompletions,
 		MaxConversations:   cfg.StoreMaxConversations,
+		TTL:                cfg.StoreTTL,
 	})
 	handler := httpapi.New(cfg, upstream, store)
 	server := newHTTPServer(cfg, handler)

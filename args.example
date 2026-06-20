@@ -11,8 +11,11 @@
 --store-max-responses 1000
 --store-max-chat-completions 1000
 --store-max-conversations 1000
---max-request-body-bytes 33554432
+--store-ttl 3600
+--store-prune-interval 60
+--max-request-body-bytes 16777216
 --read-header-timeout 10
 --idle-timeout 120
 --verify-ssl=true
+--debug-pprof=false
 --debug-log-body=false

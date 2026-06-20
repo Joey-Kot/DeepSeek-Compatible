@@ -20,6 +20,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"deepseek-responses-compatible/internal/adapters/openai/shared"
 	"deepseek-responses-compatible/internal/config"
@@ -94,14 +95,14 @@ func TestMemoryHealthRequiresAuthAndReportsStoreStats(t *testing.T) {
 	server := testServer(fakeUpstream{})
 	server.store.SaveResponse(shared.Map{"id": "resp_1"}, []shared.Map{{"id": "msg_1"}}, nil, true, "", nil)
 
-	req := httptest.NewRequest(http.MethodGet, "/health/memory", nil)
+	req := httptest.NewRequest(http.MethodGet, "/healthz/memory", nil)
 	rec := httptest.NewRecorder()
 	server.ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("unauthorized status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
-	rec = request(server, http.MethodGet, "/health/memory", "")
+	rec = request(server, http.MethodGet, "/healthz/memory", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -118,6 +119,58 @@ func TestMemoryHealthRequiresAuthAndReportsStoreStats(t *testing.T) {
 	}
 	if _, ok := data["goroutines"].(float64); !ok {
 		t.Fatalf("goroutines missing: %#v", data)
+	}
+}
+
+func TestDebugPprofRequiresFlagAndAuth(t *testing.T) {
+	server := testServer(fakeUpstream{})
+	rec := request(server, http.MethodGet, "/debug/vars", "")
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("debug vars should be disabled by default: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	debugServer := New(config.Config{
+		APITokens:       []string{"sk-test"},
+		DefaultModel:    "deepseek-v4-pro",
+		ModelIDs:        []string{"deepseek-v4-pro"},
+		DeepSeekBaseURL: "https://api.deepseek.com",
+		DebugPprof:      true,
+	}, fakeUpstream{}, state.New())
+	req := httptest.NewRequest(http.MethodGet, "/debug/vars", nil)
+	rec = httptest.NewRecorder()
+	debugServer.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("debug vars without auth status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	rec = request(debugServer, http.MethodGet, "/debug/vars", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("debug vars status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	rec = request(debugServer, http.MethodGet, "/debug/pprof/", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("pprof index status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestServeHTTPPrunesExpiredStoreOnRequestPath(t *testing.T) {
+	store := state.NewWithLimits(state.Limits{TTL: time.Nanosecond})
+	store.SaveResponse(shared.Map{"id": "resp_old"}, []shared.Map{{"id": "msg_old"}}, nil, true, "", nil)
+	server := New(config.Config{
+		APITokens:          []string{"sk-test"},
+		DefaultModel:       "deepseek-v4-pro",
+		ModelIDs:           []string{"deepseek-v4-pro"},
+		DeepSeekBaseURL:    "https://api.deepseek.com",
+		StoreTTL:           time.Nanosecond,
+		StorePruneInterval: time.Nanosecond,
+	}, fakeUpstream{}, store)
+
+	time.Sleep(time.Millisecond)
+	rec := request(server, http.MethodGet, "/health", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if _, ok := store.Response("resp_old"); ok {
+		t.Fatal("request-path prune did not remove expired response")
 	}
 }
 

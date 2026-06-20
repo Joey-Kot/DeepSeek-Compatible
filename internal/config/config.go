@@ -37,9 +37,12 @@ type Config struct {
 	StoreMaxResponses           int
 	StoreMaxChatCompletions     int
 	StoreMaxConversations       int
+	StoreTTL                    time.Duration
+	StorePruneInterval          time.Duration
 	MaxRequestBodyBytes         int64
 	ReadHeaderTimeout           time.Duration
 	IdleTimeout                 time.Duration
+	DebugPprof                  bool
 	DebugLogBody                bool
 	VerifySSL                   bool
 }
@@ -50,6 +53,8 @@ func Parse(args []string) (Config, error) {
 	var apiTokenCSV string
 	var modelCSV string
 	var timeoutSeconds float64
+	var storeTTLSeconds float64
+	var storePruneIntervalSeconds float64
 	var readHeaderTimeoutSeconds float64
 	var idleTimeoutSeconds float64
 	cfg := Config{
@@ -58,7 +63,9 @@ func Parse(args []string) (Config, error) {
 		StoreMaxResponses:           1000,
 		StoreMaxChatCompletions:     1000,
 		StoreMaxConversations:       1000,
-		MaxRequestBodyBytes:         32 << 20,
+		StoreTTL:                    time.Hour,
+		StorePruneInterval:          time.Minute,
+		MaxRequestBodyBytes:         16 << 20,
 		VerifySSL:                   true,
 	}
 
@@ -75,9 +82,12 @@ func Parse(args []string) (Config, error) {
 	fs.IntVar(&cfg.StoreMaxResponses, "store-max-responses", cfg.StoreMaxResponses, "maximum locally stored Responses; 0 means unlimited")
 	fs.IntVar(&cfg.StoreMaxChatCompletions, "store-max-chat-completions", cfg.StoreMaxChatCompletions, "maximum locally stored Chat Completions; 0 means unlimited")
 	fs.IntVar(&cfg.StoreMaxConversations, "store-max-conversations", cfg.StoreMaxConversations, "maximum locally stored Conversations; 0 means unlimited")
+	fs.Float64Var(&storeTTLSeconds, "store-ttl", cfg.StoreTTL.Seconds(), "local store TTL in seconds after last access; 0 disables TTL")
+	fs.Float64Var(&storePruneIntervalSeconds, "store-prune-interval", cfg.StorePruneInterval.Seconds(), "minimum interval between request-path store prune checks in seconds; 0 disables request-path pruning")
 	fs.Int64Var(&cfg.MaxRequestBodyBytes, "max-request-body-bytes", cfg.MaxRequestBodyBytes, "maximum local request body size in bytes; 0 means unlimited")
 	fs.Float64Var(&readHeaderTimeoutSeconds, "read-header-timeout", 10, "local HTTP read header timeout in seconds")
 	fs.Float64Var(&idleTimeoutSeconds, "idle-timeout", 120, "local HTTP idle timeout in seconds")
+	fs.BoolVar(&cfg.DebugPprof, "debug-pprof", false, "enable authenticated /debug/pprof/ and /debug/vars endpoints")
 	fs.BoolVar(&cfg.DebugLogBody, "debug-log-body", false, "log redacted request/response bodies")
 	fs.BoolVar(&cfg.VerifySSL, "verify-ssl", true, "verify DeepSeek upstream TLS certificates")
 
@@ -119,6 +129,12 @@ func Parse(args []string) (Config, error) {
 	if cfg.StoreMaxConversations < 0 {
 		return Config{}, fmt.Errorf("--store-max-conversations must be non-negative")
 	}
+	if storeTTLSeconds < 0 {
+		return Config{}, fmt.Errorf("--store-ttl must be non-negative")
+	}
+	if storePruneIntervalSeconds < 0 {
+		return Config{}, fmt.Errorf("--store-prune-interval must be non-negative")
+	}
 	if cfg.MaxRequestBodyBytes < 0 {
 		return Config{}, fmt.Errorf("--max-request-body-bytes must be non-negative")
 	}
@@ -129,6 +145,8 @@ func Parse(args []string) (Config, error) {
 		return Config{}, fmt.Errorf("--idle-timeout must be positive")
 	}
 	cfg.DeepSeekHTTPTimeout = time.Duration(timeoutSeconds * float64(time.Second))
+	cfg.StoreTTL = time.Duration(storeTTLSeconds * float64(time.Second))
+	cfg.StorePruneInterval = time.Duration(storePruneIntervalSeconds * float64(time.Second))
 	cfg.ReadHeaderTimeout = time.Duration(readHeaderTimeoutSeconds * float64(time.Second))
 	cfg.IdleTimeout = time.Duration(idleTimeoutSeconds * float64(time.Second))
 	return cfg, nil

@@ -55,7 +55,13 @@ func TestParseDefaults(t *testing.T) {
 	if cfg.StoreMaxConversations != 1000 {
 		t.Fatalf("StoreMaxConversations = %d", cfg.StoreMaxConversations)
 	}
-	if cfg.MaxRequestBodyBytes != 32<<20 {
+	if cfg.StoreTTL != time.Hour {
+		t.Fatalf("StoreTTL = %s", cfg.StoreTTL)
+	}
+	if cfg.StorePruneInterval != time.Minute {
+		t.Fatalf("StorePruneInterval = %s", cfg.StorePruneInterval)
+	}
+	if cfg.MaxRequestBodyBytes != 16<<20 {
 		t.Fatalf("MaxRequestBodyBytes = %d", cfg.MaxRequestBodyBytes)
 	}
 	if cfg.ReadHeaderTimeout != 10*time.Second {
@@ -84,9 +90,12 @@ func TestParseCommandLineFlags(t *testing.T) {
 		"--store-max-responses", "11",
 		"--store-max-chat-completions", "12",
 		"--store-max-conversations", "13",
+		"--store-ttl", "600",
+		"--store-prune-interval", "30",
 		"--max-request-body-bytes", "1024",
 		"--read-header-timeout", "3.5",
 		"--idle-timeout", "45",
+		"--debug-pprof=true",
 		"--debug-log-body=true",
 		"--verify-ssl=false",
 	})
@@ -123,6 +132,12 @@ func TestParseCommandLineFlags(t *testing.T) {
 	if cfg.StoreMaxConversations != 13 {
 		t.Fatalf("StoreMaxConversations = %d", cfg.StoreMaxConversations)
 	}
+	if cfg.StoreTTL != 10*time.Minute {
+		t.Fatalf("StoreTTL = %s", cfg.StoreTTL)
+	}
+	if cfg.StorePruneInterval != 30*time.Second {
+		t.Fatalf("StorePruneInterval = %s", cfg.StorePruneInterval)
+	}
 	if cfg.MaxRequestBodyBytes != 1024 {
 		t.Fatalf("MaxRequestBodyBytes = %d", cfg.MaxRequestBodyBytes)
 	}
@@ -134,6 +149,9 @@ func TestParseCommandLineFlags(t *testing.T) {
 	}
 	if !cfg.DebugLogBody {
 		t.Fatalf("boolean flags were not parsed: %#v", cfg)
+	}
+	if !cfg.DebugPprof {
+		t.Fatalf("DebugPprof = %t", cfg.DebugPprof)
 	}
 	if cfg.VerifySSL {
 		t.Fatalf("VerifySSL = %t", cfg.VerifySSL)
@@ -165,7 +183,7 @@ func TestParseRejectsInvalidConnectionLimits(t *testing.T) {
 }
 
 func TestParseRejectsInvalidStoreLimits(t *testing.T) {
-	for _, flag := range []string{"--store-max-responses", "--store-max-chat-completions", "--store-max-conversations", "--max-request-body-bytes"} {
+	for _, flag := range []string{"--store-max-responses", "--store-max-chat-completions", "--store-max-conversations", "--store-ttl", "--store-prune-interval", "--max-request-body-bytes"} {
 		if _, err := Parse([]string{flag, "-1"}); err == nil {
 			t.Fatalf("expected error for %s", flag)
 		}

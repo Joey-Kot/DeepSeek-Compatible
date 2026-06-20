@@ -13,6 +13,7 @@ package state
 
 import (
 	"testing"
+	"time"
 
 	"deepseek-responses-compatible/internal/adapters/openai/shared"
 )
@@ -216,6 +217,92 @@ func TestZeroLimitsKeepUnlimitedBehavior(t *testing.T) {
 		if _, ok := store.ChatCompletion(id); !ok {
 			t.Fatalf("chat completion %s should be retained", id)
 		}
+	}
+}
+
+func TestPruneExpiredRemovesOldItemsAndKeepsSharedReferences(t *testing.T) {
+	store := NewWithLimits(Limits{TTL: time.Minute})
+	sharedItem := shared.Map{"id": "msg_shared"}
+	store.SaveConversation(shared.Map{"id": "conv_old"}, []shared.Map{sharedItem, shared.Map{"id": "msg_conv_old"}})
+	store.SaveResponse(shared.Map{"id": "resp_old"}, []shared.Map{sharedItem}, []shared.Map{{"id": "msg_resp_old"}}, true, "", nil)
+	store.SaveChatCompletion(shared.Map{"id": "chat_old"}, []shared.Map{{"id": "msg_chat_old"}})
+
+	old := time.Now().Add(-2 * time.Minute)
+	store.mu.Lock()
+	store.conversationAccessedAt["conv_old"] = old
+	store.responseAccessedAt["resp_old"] = old
+	store.chatAccessedAt["chat_old"] = old
+	store.mu.Unlock()
+
+	store.PruneExpired(time.Now())
+
+	if _, ok := store.Conversation("conv_old"); ok {
+		t.Fatal("expired conversation was not pruned")
+	}
+	if _, ok := store.Response("resp_old"); ok {
+		t.Fatal("expired response was not pruned")
+	}
+	if _, ok := store.ChatCompletion("chat_old"); ok {
+		t.Fatal("expired chat completion was not pruned")
+	}
+	for _, id := range []string{"msg_shared", "msg_conv_old", "msg_resp_old"} {
+		if item, ok := store.Item(id); ok {
+			t.Fatalf("expired item %s still indexed: %#v", id, item)
+		}
+	}
+}
+
+func TestPruneExpiredKeepsFreshItemsAndTTLZeroDisablesPrune(t *testing.T) {
+	freshStore := NewWithLimits(Limits{TTL: time.Minute})
+	freshStore.SaveResponse(shared.Map{"id": "resp_fresh"}, []shared.Map{{"id": "msg_fresh"}}, nil, true, "", nil)
+	freshStore.PruneExpired(time.Now())
+	if _, ok := freshStore.Response("resp_fresh"); !ok {
+		t.Fatal("fresh response was pruned")
+	}
+
+	unlimitedStore := NewWithLimits(Limits{})
+	unlimitedStore.SaveResponse(shared.Map{"id": "resp_old"}, []shared.Map{{"id": "msg_old"}}, nil, true, "", nil)
+	unlimitedStore.mu.Lock()
+	unlimitedStore.responseAccessedAt["resp_old"] = time.Now().Add(-24 * time.Hour)
+	unlimitedStore.mu.Unlock()
+	unlimitedStore.PruneExpired(time.Now())
+	if _, ok := unlimitedStore.Response("resp_old"); !ok {
+		t.Fatal("TTL=0 should disable pruning")
+	}
+}
+
+func TestAccessRefreshesStoreTTL(t *testing.T) {
+	store := NewWithLimits(Limits{TTL: time.Minute})
+	store.SaveResponse(shared.Map{"id": "resp_1"}, []shared.Map{{"id": "msg_1"}}, nil, true, "", nil)
+	store.SaveConversation(shared.Map{"id": "conv_1"}, nil)
+	store.SaveChatCompletion(shared.Map{"id": "chat_1"}, nil)
+
+	old := time.Now().Add(-2 * time.Minute)
+	store.mu.Lock()
+	store.responseAccessedAt["resp_1"] = old
+	store.conversationAccessedAt["conv_1"] = old
+	store.chatAccessedAt["chat_1"] = old
+	store.mu.Unlock()
+
+	if _, ok := store.Response("resp_1"); !ok {
+		t.Fatal("response missing before prune")
+	}
+	if _, ok := store.Conversation("conv_1"); !ok {
+		t.Fatal("conversation missing before prune")
+	}
+	if _, ok := store.ChatCompletion("chat_1"); !ok {
+		t.Fatal("chat completion missing before prune")
+	}
+	store.PruneExpired(time.Now())
+
+	if _, ok := store.Response("resp_1"); !ok {
+		t.Fatal("accessed response was pruned")
+	}
+	if _, ok := store.Conversation("conv_1"); !ok {
+		t.Fatal("accessed conversation was pruned")
+	}
+	if _, ok := store.ChatCompletion("chat_1"); !ok {
+		t.Fatal("accessed chat completion was pruned")
 	}
 }
 

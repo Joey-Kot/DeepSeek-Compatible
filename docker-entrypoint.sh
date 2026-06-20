@@ -12,6 +12,9 @@ if [ "$#" -eq 0 ] || [ "${1#-}" != "$1" ]; then
   if [ -n "${DEBUG_LOG_BODY:-}" ]; then
     set -- "--debug-log-body=${DEBUG_LOG_BODY}" "$@"
   fi
+  if [ -n "${DEBUG_PPROF:-}" ]; then
+    set -- "--debug-pprof=${DEBUG_PPROF}" "$@"
+  fi
   if [ -n "${VERIFY_SSL:-}" ]; then
     set -- "--verify-ssl=${VERIFY_SSL}" "$@"
   fi
@@ -35,6 +38,12 @@ if [ "$#" -eq 0 ] || [ "${1#-}" != "$1" ]; then
   fi
   if [ -n "${STORE_MAX_CONVERSATIONS:-}" ]; then
     set -- "--store-max-conversations" "${STORE_MAX_CONVERSATIONS}" "$@"
+  fi
+  if [ -n "${STORE_TTL:-}" ]; then
+    set -- "--store-ttl" "${STORE_TTL}" "$@"
+  fi
+  if [ -n "${STORE_PRUNE_INTERVAL:-}" ]; then
+    set -- "--store-prune-interval" "${STORE_PRUNE_INTERVAL}" "$@"
   fi
   if [ -n "${MAX_REQUEST_BODY_BYTES:-}" ]; then
     set -- "--max-request-body-bytes" "${MAX_REQUEST_BODY_BYTES}" "$@"
