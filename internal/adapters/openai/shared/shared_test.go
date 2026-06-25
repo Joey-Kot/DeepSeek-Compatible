@@ -26,6 +26,25 @@ func TestCloneMapReturnsIndependentCopy(t *testing.T) {
 	}
 }
 
+func TestCloneMapPreservesJSONNumber(t *testing.T) {
+	original := Map{"n": json.Number("123"), "items": []any{Map{"v": json.Number("456")}}}
+	cloned := CloneMap(original)
+
+	if _, ok := cloned["n"].(json.Number); !ok {
+		t.Fatalf("top-level json.Number was not preserved: %#v", cloned["n"])
+	}
+	items := cloned["items"].([]any)
+	nested := items[0].(map[string]any)
+	if _, ok := nested["v"].(json.Number); !ok {
+		t.Fatalf("nested json.Number was not preserved: %#v", nested["v"])
+	}
+	nested["v"] = json.Number("789")
+	originalNested := original["items"].([]any)[0].(Map)
+	if originalNested["v"] != json.Number("456") {
+		t.Fatalf("original nested value was mutated: %#v", original)
+	}
+}
+
 func TestContentToTextHandlesStringsAndParts(t *testing.T) {
 	content := []any{
 		map[string]any{"type": "input_text", "text": "hello "},

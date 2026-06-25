@@ -138,6 +138,44 @@ func TestDeleteKeepsItemsReferencedElsewhere(t *testing.T) {
 	}
 }
 
+func TestSaveConversationReplacementReleasesOldItems(t *testing.T) {
+	store := New()
+	store.SaveConversation(shared.Map{"id": "conv_1"}, []shared.Map{{"id": "msg_old"}})
+	store.SaveConversation(shared.Map{"id": "conv_1"}, []shared.Map{{"id": "msg_new"}})
+
+	if _, ok := store.Item("msg_old"); ok {
+		t.Fatal("replaced conversation kept old item reference")
+	}
+	if _, ok := store.Item("msg_new"); !ok {
+		t.Fatal("replacement conversation did not index new item")
+	}
+	if !store.DeleteConversation("conv_1") {
+		t.Fatal("delete conversation failed")
+	}
+	if _, ok := store.Item("msg_new"); ok {
+		t.Fatal("deleted replacement conversation kept new item")
+	}
+}
+
+func TestSaveResponseReplacementReleasesOldItems(t *testing.T) {
+	store := New()
+	store.SaveResponse(shared.Map{"id": "resp_1"}, []shared.Map{{"id": "msg_old"}}, nil, true, "", nil)
+	store.SaveResponse(shared.Map{"id": "resp_1"}, []shared.Map{{"id": "msg_new"}}, nil, true, "", nil)
+
+	if _, ok := store.Item("msg_old"); ok {
+		t.Fatal("replaced response kept old item reference")
+	}
+	if _, ok := store.Item("msg_new"); !ok {
+		t.Fatal("replacement response did not index new item")
+	}
+	if !store.DeleteResponse("resp_1") {
+		t.Fatal("delete response failed")
+	}
+	if _, ok := store.Item("msg_new"); ok {
+		t.Fatal("deleted replacement response kept new item")
+	}
+}
+
 func TestResponseLimitEvictsOldestAndUnreferencedItems(t *testing.T) {
 	store := NewWithLimits(Limits{MaxResponses: 1})
 	store.SaveResponse(shared.Map{"id": "resp_1"}, []shared.Map{{"id": "msg_1"}}, nil, true, "", nil)

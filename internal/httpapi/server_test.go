@@ -455,6 +455,21 @@ func TestReadJSONRejectsRequestBodyOverLimit(t *testing.T) {
 	}
 }
 
+func TestReadJSONRejectsTrailingContent(t *testing.T) {
+	server := testServer(fakeUpstream{chatFn: func(shared.Map) (shared.Map, error) {
+		t.Fatal("upstream should not be called for malformed JSON")
+		return nil, nil
+	}})
+
+	rec := request(server, http.MethodPost, "/v1/chat/completions", `{"model":"deepseek-v4-pro"} true`)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "single JSON object") {
+		t.Fatalf("body=%s", rec.Body.String())
+	}
+}
+
 func request(server *Server, method, path, body string) *httptest.ResponseRecorder {
 	return requestWithHeader(server, method, path, body, "Authorization", "Bearer sk-test")
 }
