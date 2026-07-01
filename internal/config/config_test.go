@@ -12,7 +12,9 @@
 package config
 
 import (
+	"bytes"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -201,6 +203,35 @@ func TestParseRejectsNonPositiveServerTimeouts(t *testing.T) {
 	for _, flag := range []string{"--read-header-timeout", "--idle-timeout"} {
 		if _, err := Parse([]string{flag, "0"}); err == nil {
 			t.Fatalf("expected error for %s", flag)
+		}
+	}
+}
+
+func TestUsageIncludesCurrentFlagsAndProtocolSummary(t *testing.T) {
+	var out bytes.Buffer
+	cfg := defaultConfig()
+	var flags parseFlags
+	fs := newFlagSet(&cfg, &flags)
+	fs.SetOutput(&out)
+
+	usage(fs)
+
+	text := out.String()
+	for _, want := range []string{
+		"Usage:",
+		"deepseek-compatible [flags]",
+		"--deepseek-max-response-body-bytes",
+		"--store-max-chat-completions",
+		"--store-prune-interval",
+		"--max-request-body-bytes",
+		"--debug-pprof",
+		"docker.env.example",
+		"OpenAI Responses",
+		"Gemini Generate Content",
+		"/health/memory",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("usage output missing %q:\n%s", want, text)
 		}
 	}
 }

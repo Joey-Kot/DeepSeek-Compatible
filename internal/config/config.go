@@ -48,58 +48,27 @@ type Config struct {
 	VerifySSL                    bool
 }
 
+type parseFlags struct {
+	apiTokenCSV               string
+	modelCSV                  string
+	timeoutSeconds            float64
+	storeTTLSeconds           float64
+	storePruneIntervalSeconds float64
+	readHeaderTimeoutSeconds  float64
+	idleTimeoutSeconds        float64
+}
+
 func Parse(args []string) (Config, error) {
-	fs := flag.NewFlagSet("deepseek-responses-compatible", flag.ContinueOnError)
-
-	var apiTokenCSV string
-	var modelCSV string
-	var timeoutSeconds float64
-	var storeTTLSeconds float64
-	var storePruneIntervalSeconds float64
-	var readHeaderTimeoutSeconds float64
-	var idleTimeoutSeconds float64
-	cfg := Config{
-		DeepSeekMaxIdleConns:         200,
-		DeepSeekMaxIdleConnsPerHost:  100,
-		DeepSeekMaxResponseBodyBytes: 32 << 20,
-		StoreMaxResponses:            1000,
-		StoreMaxChatCompletions:      1000,
-		StoreMaxConversations:        1000,
-		StoreTTL:                     time.Hour,
-		StorePruneInterval:           time.Minute,
-		MaxRequestBodyBytes:          16 << 20,
-		VerifySSL:                    true,
-	}
-
-	fs.StringVar(&cfg.Listen, "listen", ":8080", "HTTP listen address")
-	fs.StringVar(&apiTokenCSV, "api-token", "", "comma-separated local bearer token list")
-	fs.StringVar(&cfg.DeepSeekAPIKey, "deepseek-api-key", "", "DeepSeek upstream API key")
-	fs.StringVar(&cfg.DeepSeekBaseURL, "deepseek-base-url", DefaultDeepSeekBaseURL, "DeepSeek upstream base URL")
-	fs.StringVar(&cfg.DefaultModel, "deepseek-model", DefaultModel, "default DeepSeek model")
-	fs.StringVar(&modelCSV, "deepseek-models", "", "comma-separated model IDs exposed by /v1/models")
-	fs.Float64Var(&timeoutSeconds, "deepseek-http-timeout", 120, "DeepSeek HTTP timeout in seconds")
-	fs.IntVar(&cfg.DeepSeekMaxIdleConns, "deepseek-max-idle-conns", cfg.DeepSeekMaxIdleConns, "maximum idle upstream HTTP connections")
-	fs.IntVar(&cfg.DeepSeekMaxIdleConnsPerHost, "deepseek-max-idle-conns-per-host", cfg.DeepSeekMaxIdleConnsPerHost, "maximum idle upstream HTTP connections per host")
-	fs.IntVar(&cfg.DeepSeekMaxConnsPerHost, "deepseek-max-conns-per-host", 0, "maximum upstream HTTP connections per host; 0 means unlimited")
-	fs.Int64Var(&cfg.DeepSeekMaxResponseBodyBytes, "deepseek-max-response-body-bytes", cfg.DeepSeekMaxResponseBodyBytes, "maximum DeepSeek upstream response body size in bytes; 0 means unlimited")
-	fs.IntVar(&cfg.StoreMaxResponses, "store-max-responses", cfg.StoreMaxResponses, "maximum locally stored Responses; 0 means unlimited")
-	fs.IntVar(&cfg.StoreMaxChatCompletions, "store-max-chat-completions", cfg.StoreMaxChatCompletions, "maximum locally stored Chat Completions; 0 means unlimited")
-	fs.IntVar(&cfg.StoreMaxConversations, "store-max-conversations", cfg.StoreMaxConversations, "maximum locally stored Conversations; 0 means unlimited")
-	fs.Float64Var(&storeTTLSeconds, "store-ttl", cfg.StoreTTL.Seconds(), "local store TTL in seconds after last access; 0 disables TTL")
-	fs.Float64Var(&storePruneIntervalSeconds, "store-prune-interval", cfg.StorePruneInterval.Seconds(), "minimum interval between request-path store prune checks in seconds; 0 disables request-path pruning")
-	fs.Int64Var(&cfg.MaxRequestBodyBytes, "max-request-body-bytes", cfg.MaxRequestBodyBytes, "maximum local request body size in bytes; 0 means unlimited")
-	fs.Float64Var(&readHeaderTimeoutSeconds, "read-header-timeout", 10, "local HTTP read header timeout in seconds")
-	fs.Float64Var(&idleTimeoutSeconds, "idle-timeout", 120, "local HTTP idle timeout in seconds")
-	fs.BoolVar(&cfg.DebugPprof, "debug-pprof", false, "enable authenticated /debug/pprof/ and /debug/vars endpoints")
-	fs.BoolVar(&cfg.DebugLogBody, "debug-log-body", false, "log redacted request/response bodies")
-	fs.BoolVar(&cfg.VerifySSL, "verify-ssl", true, "verify DeepSeek upstream TLS certificates")
+	cfg := defaultConfig()
+	var flags parseFlags
+	fs := newFlagSet(&cfg, &flags)
 
 	if err := fs.Parse(args); err != nil {
 		return Config{}, err
 	}
 
-	cfg.APITokens = splitCSV(apiTokenCSV)
-	cfg.ModelIDs = splitCSV(modelCSV)
+	cfg.APITokens = splitCSV(flags.apiTokenCSV)
+	cfg.ModelIDs = splitCSV(flags.modelCSV)
 	if cfg.DefaultModel == "" {
 		cfg.DefaultModel = DefaultModel
 	}
@@ -111,7 +80,7 @@ func Parse(args []string) (Config, error) {
 	if cfg.DeepSeekBaseURL == "" {
 		cfg.DeepSeekBaseURL = DefaultDeepSeekBaseURL
 	}
-	if timeoutSeconds <= 0 {
+	if flags.timeoutSeconds <= 0 {
 		return Config{}, fmt.Errorf("--deepseek-http-timeout must be positive")
 	}
 	if cfg.DeepSeekMaxIdleConns < 0 {
@@ -135,27 +104,70 @@ func Parse(args []string) (Config, error) {
 	if cfg.StoreMaxConversations < 0 {
 		return Config{}, fmt.Errorf("--store-max-conversations must be non-negative")
 	}
-	if storeTTLSeconds < 0 {
+	if flags.storeTTLSeconds < 0 {
 		return Config{}, fmt.Errorf("--store-ttl must be non-negative")
 	}
-	if storePruneIntervalSeconds < 0 {
+	if flags.storePruneIntervalSeconds < 0 {
 		return Config{}, fmt.Errorf("--store-prune-interval must be non-negative")
 	}
 	if cfg.MaxRequestBodyBytes < 0 {
 		return Config{}, fmt.Errorf("--max-request-body-bytes must be non-negative")
 	}
-	if readHeaderTimeoutSeconds <= 0 {
+	if flags.readHeaderTimeoutSeconds <= 0 {
 		return Config{}, fmt.Errorf("--read-header-timeout must be positive")
 	}
-	if idleTimeoutSeconds <= 0 {
+	if flags.idleTimeoutSeconds <= 0 {
 		return Config{}, fmt.Errorf("--idle-timeout must be positive")
 	}
-	cfg.DeepSeekHTTPTimeout = time.Duration(timeoutSeconds * float64(time.Second))
-	cfg.StoreTTL = time.Duration(storeTTLSeconds * float64(time.Second))
-	cfg.StorePruneInterval = time.Duration(storePruneIntervalSeconds * float64(time.Second))
-	cfg.ReadHeaderTimeout = time.Duration(readHeaderTimeoutSeconds * float64(time.Second))
-	cfg.IdleTimeout = time.Duration(idleTimeoutSeconds * float64(time.Second))
+	cfg.DeepSeekHTTPTimeout = time.Duration(flags.timeoutSeconds * float64(time.Second))
+	cfg.StoreTTL = time.Duration(flags.storeTTLSeconds * float64(time.Second))
+	cfg.StorePruneInterval = time.Duration(flags.storePruneIntervalSeconds * float64(time.Second))
+	cfg.ReadHeaderTimeout = time.Duration(flags.readHeaderTimeoutSeconds * float64(time.Second))
+	cfg.IdleTimeout = time.Duration(flags.idleTimeoutSeconds * float64(time.Second))
 	return cfg, nil
+}
+
+func defaultConfig() Config {
+	return Config{
+		DeepSeekMaxIdleConns:         200,
+		DeepSeekMaxIdleConnsPerHost:  100,
+		DeepSeekMaxResponseBodyBytes: 32 << 20,
+		StoreMaxResponses:            1000,
+		StoreMaxChatCompletions:      1000,
+		StoreMaxConversations:        1000,
+		StoreTTL:                     time.Hour,
+		StorePruneInterval:           time.Minute,
+		MaxRequestBodyBytes:          16 << 20,
+		VerifySSL:                    true,
+	}
+}
+
+func newFlagSet(cfg *Config, flags *parseFlags) *flag.FlagSet {
+	fs := flag.NewFlagSet("deepseek-compatible", flag.ContinueOnError)
+	fs.StringVar(&cfg.Listen, "listen", ":8080", "HTTP listen address")
+	fs.StringVar(&flags.apiTokenCSV, "api-token", "", "comma-separated local bearer token list")
+	fs.StringVar(&cfg.DeepSeekAPIKey, "deepseek-api-key", "", "DeepSeek upstream API key")
+	fs.StringVar(&cfg.DeepSeekBaseURL, "deepseek-base-url", DefaultDeepSeekBaseURL, "DeepSeek upstream base URL")
+	fs.StringVar(&cfg.DefaultModel, "deepseek-model", DefaultModel, "default DeepSeek model")
+	fs.StringVar(&flags.modelCSV, "deepseek-models", "", "comma-separated model IDs exposed by /v1/models")
+	fs.Float64Var(&flags.timeoutSeconds, "deepseek-http-timeout", 120, "DeepSeek HTTP timeout in seconds")
+	fs.IntVar(&cfg.DeepSeekMaxIdleConns, "deepseek-max-idle-conns", cfg.DeepSeekMaxIdleConns, "maximum idle upstream HTTP connections")
+	fs.IntVar(&cfg.DeepSeekMaxIdleConnsPerHost, "deepseek-max-idle-conns-per-host", cfg.DeepSeekMaxIdleConnsPerHost, "maximum idle upstream HTTP connections per host")
+	fs.IntVar(&cfg.DeepSeekMaxConnsPerHost, "deepseek-max-conns-per-host", 0, "maximum upstream HTTP connections per host; 0 means unlimited")
+	fs.Int64Var(&cfg.DeepSeekMaxResponseBodyBytes, "deepseek-max-response-body-bytes", cfg.DeepSeekMaxResponseBodyBytes, "maximum DeepSeek upstream response body size in bytes; 0 means unlimited")
+	fs.IntVar(&cfg.StoreMaxResponses, "store-max-responses", cfg.StoreMaxResponses, "maximum locally stored Responses; 0 means unlimited")
+	fs.IntVar(&cfg.StoreMaxChatCompletions, "store-max-chat-completions", cfg.StoreMaxChatCompletions, "maximum locally stored Chat Completions; 0 means unlimited")
+	fs.IntVar(&cfg.StoreMaxConversations, "store-max-conversations", cfg.StoreMaxConversations, "maximum locally stored Conversations; 0 means unlimited")
+	fs.Float64Var(&flags.storeTTLSeconds, "store-ttl", cfg.StoreTTL.Seconds(), "local store TTL in seconds after last access; 0 disables TTL")
+	fs.Float64Var(&flags.storePruneIntervalSeconds, "store-prune-interval", cfg.StorePruneInterval.Seconds(), "minimum interval between request-path store prune checks in seconds; 0 disables request-path pruning")
+	fs.Int64Var(&cfg.MaxRequestBodyBytes, "max-request-body-bytes", cfg.MaxRequestBodyBytes, "maximum local request body size in bytes; 0 means unlimited")
+	fs.Float64Var(&flags.readHeaderTimeoutSeconds, "read-header-timeout", 10, "local HTTP read header timeout in seconds")
+	fs.Float64Var(&flags.idleTimeoutSeconds, "idle-timeout", 120, "local HTTP idle timeout in seconds")
+	fs.BoolVar(&cfg.DebugPprof, "debug-pprof", false, "enable authenticated /debug/pprof/ and /debug/vars endpoints")
+	fs.BoolVar(&cfg.DebugLogBody, "debug-log-body", false, "log redacted request/response bodies")
+	fs.BoolVar(&cfg.VerifySSL, "verify-ssl", true, "verify DeepSeek upstream TLS certificates")
+	fs.Usage = func() { usage(fs) }
+	return fs
 }
 
 func splitCSV(value string) []string {
@@ -180,4 +192,43 @@ func contains(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func usage(fs *flag.FlagSet) {
+	out := fs.Output()
+	fmt.Fprintf(out, "Usage:\n")
+	fmt.Fprintf(out, "  %s [flags]\n\n", fs.Name())
+	fmt.Fprintf(out, "Example:\n")
+	fmt.Fprintf(out, "  %s --listen :8080 --api-token sk-local-test --deepseek-api-key sk-your-deepseek-key\n\n", fs.Name())
+	fmt.Fprintf(out, "Flags:\n")
+	printFlagDefaults(fs)
+	fmt.Fprintf(out, "\nContainer deployment:\n")
+	fmt.Fprintf(out, "  docker-entrypoint.sh maps environment variables to the same flags. See docker.env.example.\n\n")
+	fmt.Fprintf(out, "Compatible APIs:\n")
+	fmt.Fprintf(out, "  DeepSeek Chat Completions: POST /chat/completions\n")
+	fmt.Fprintf(out, "  OpenAI Chat Completions:   /v1/chat/completions\n")
+	fmt.Fprintf(out, "  OpenAI Responses:          /v1/responses\n")
+	fmt.Fprintf(out, "  OpenAI Conversations:      /v1/conversations\n")
+	fmt.Fprintf(out, "  Anthropic Messages:        /v1/messages\n")
+	fmt.Fprintf(out, "  Gemini Generate Content:   /v1beta/models/{model}:generateContent, /v1/models/{model}:generateContent\n")
+	fmt.Fprintf(out, "  Common endpoints:          /v1/models, /health, /health/memory\n")
+}
+
+func printFlagDefaults(fs *flag.FlagSet) {
+	out := fs.Output()
+	fs.VisitAll(func(f *flag.Flag) {
+		name, usage := flag.UnquoteUsage(f)
+		if name == "" {
+			fmt.Fprintf(out, "  --%s\n", f.Name)
+		} else {
+			fmt.Fprintf(out, "  --%s %s\n", f.Name, name)
+		}
+		if usage != "" && f.DefValue != "" {
+			fmt.Fprintf(out, "      %s (default %s)\n", usage, f.DefValue)
+		} else if usage != "" {
+			fmt.Fprintf(out, "      %s\n", usage)
+		} else if f.DefValue != "" {
+			fmt.Fprintf(out, "      default %s\n", f.DefValue)
+		}
+	})
 }
