@@ -4,11 +4,11 @@
 
 这是一个面向 DeepSeek 的协议仿真器。它对外提供 DeepSeek Chat Completions、OpenAI Chat Completions、OpenAI Responses、Anthropic Messages 和 Gemini Generate Content 等兼容 API，并在 DeepSeek Chat Completions 之上尽可能高保真地仿真这些协议的请求与响应语义。
 
-本地运行时通过命令行参数进行配置，容器部署时通过环境变量进行配置。
+服务可以通过命令行参数或环境变量配置；同一个配置项同时提供时，命令行参数优先。
 
 ## 配置与使用
 
-本地二进制运行时，服务通过命令行参数配置。
+本地二进制运行时，服务可以通过命令行参数或环境变量配置。
 可以拉取项目后自行编译运行或直接从 Release 下载：
 
 ```bash
@@ -30,7 +30,7 @@ go build -trimpath -ldflags="-s -w" -o deepseek-compatible ./cmd/server
   --debug-log-body=false
 ```
 
-容器部署时使用环境变量。可以先从 `docker.env.example` 复制一份配置：
+容器部署时通常更适合使用环境变量。可以先从 `docker.env.example` 复制一份配置：
 
 ```bash
 cp docker.env.example docker.env
@@ -64,7 +64,7 @@ docker run -itd \
   deepseek-compatible:latest
 ```
 
-容器环境变量说明：
+环境变量说明：
 
 | 环境变量 | 对应参数 |
 | --- | --- |
@@ -90,6 +90,8 @@ docker run -itd \
 | `VERIFY_SSL` | `--verify-ssl` |
 | `DEBUG_PPROF` | `--debug-pprof` |
 | `DEBUG_LOG_BODY` | `--debug-log-body` |
+
+同一个配置项同时提供命令行参数和环境变量时，命令行参数优先。
 
 参数说明：
 

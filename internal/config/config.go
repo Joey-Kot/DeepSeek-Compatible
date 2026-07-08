@@ -14,6 +14,7 @@ package config
 import (
 	"flag"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 )
@@ -58,12 +59,45 @@ type parseFlags struct {
 	idleTimeoutSeconds        float64
 }
 
+type envFlag struct {
+	Env  string
+	Flag string
+}
+
+var envFlags = []envFlag{
+	{Env: "LISTEN", Flag: "listen"},
+	{Env: "API_TOKEN", Flag: "api-token"},
+	{Env: "DEEPSEEK_API_KEY", Flag: "deepseek-api-key"},
+	{Env: "DEEPSEEK_BASE_URL", Flag: "deepseek-base-url"},
+	{Env: "DEEPSEEK_MODEL", Flag: "deepseek-model"},
+	{Env: "DEEPSEEK_MODELS", Flag: "deepseek-models"},
+	{Env: "DEEPSEEK_HTTP_TIMEOUT", Flag: "deepseek-http-timeout"},
+	{Env: "DEEPSEEK_MAX_IDLE_CONNS", Flag: "deepseek-max-idle-conns"},
+	{Env: "DEEPSEEK_MAX_IDLE_CONNS_PER_HOST", Flag: "deepseek-max-idle-conns-per-host"},
+	{Env: "DEEPSEEK_MAX_CONNS_PER_HOST", Flag: "deepseek-max-conns-per-host"},
+	{Env: "DEEPSEEK_MAX_RESPONSE_BODY_BYTES", Flag: "deepseek-max-response-body-bytes"},
+	{Env: "STORE_MAX_RESPONSES", Flag: "store-max-responses"},
+	{Env: "STORE_MAX_CHAT_COMPLETIONS", Flag: "store-max-chat-completions"},
+	{Env: "STORE_MAX_CONVERSATIONS", Flag: "store-max-conversations"},
+	{Env: "STORE_TTL", Flag: "store-ttl"},
+	{Env: "STORE_PRUNE_INTERVAL", Flag: "store-prune-interval"},
+	{Env: "MAX_REQUEST_BODY_BYTES", Flag: "max-request-body-bytes"},
+	{Env: "READ_HEADER_TIMEOUT", Flag: "read-header-timeout"},
+	{Env: "IDLE_TIMEOUT", Flag: "idle-timeout"},
+	{Env: "VERIFY_SSL", Flag: "verify-ssl"},
+	{Env: "DEBUG_PPROF", Flag: "debug-pprof"},
+	{Env: "DEBUG_LOG_BODY", Flag: "debug-log-body"},
+}
+
 func Parse(args []string) (Config, error) {
 	cfg := defaultConfig()
 	var flags parseFlags
 	fs := newFlagSet(&cfg, &flags)
 
 	if err := fs.Parse(args); err != nil {
+		return Config{}, err
+	}
+	if err := applyEnv(fs); err != nil {
 		return Config{}, err
 	}
 
@@ -170,6 +204,30 @@ func newFlagSet(cfg *Config, flags *parseFlags) *flag.FlagSet {
 	return fs
 }
 
+func applyEnv(fs *flag.FlagSet) error {
+	setFlags := make(map[string]bool)
+	fs.Visit(func(f *flag.Flag) {
+		setFlags[f.Name] = true
+	})
+	for _, envFlag := range envFlags {
+		if setFlags[envFlag.Flag] {
+			continue
+		}
+		value, ok := os.LookupEnv(envFlag.Env)
+		if !ok || value == "" {
+			continue
+		}
+		flagValue := fs.Lookup(envFlag.Flag)
+		if flagValue == nil {
+			return fmt.Errorf("environment variable %s maps to unknown flag --%s", envFlag.Env, envFlag.Flag)
+		}
+		if err := flagValue.Value.Set(value); err != nil {
+			return fmt.Errorf("invalid %s for --%s: %w", envFlag.Env, envFlag.Flag, err)
+		}
+	}
+	return nil
+}
+
 func splitCSV(value string) []string {
 	if strings.TrimSpace(value) == "" {
 		return nil
@@ -202,8 +260,8 @@ func usage(fs *flag.FlagSet) {
 	fmt.Fprintf(out, "  %s --listen :8080 --api-token sk-local-test --deepseek-api-key sk-your-deepseek-key\n\n", fs.Name())
 	fmt.Fprintf(out, "Flags:\n")
 	printFlagDefaults(fs)
-	fmt.Fprintf(out, "\nContainer deployment:\n")
-	fmt.Fprintf(out, "  docker-entrypoint.sh maps environment variables to the same flags. See docker.env.example.\n\n")
+	fmt.Fprintf(out, "\nEnvironment variables:\n")
+	fmt.Fprintf(out, "  Every flag can also be set with its matching environment variable. Command-line flags take precedence. See docker.env.example.\n\n")
 	fmt.Fprintf(out, "Compatible APIs:\n")
 	fmt.Fprintf(out, "  DeepSeek Chat Completions: POST /chat/completions\n")
 	fmt.Fprintf(out, "  OpenAI Chat Completions:   /v1/chat/completions\n")

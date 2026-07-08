@@ -4,11 +4,11 @@ English | [中文](README_ZH.md)
 
 This is a DeepSeek-focused protocol emulator. It exposes DeepSeek Chat Completions, OpenAI Chat Completions, OpenAI Responses, Anthropic Messages, and Gemini Generate Content compatible APIs, then emulates their request and response semantics on top of DeepSeek Chat Completions as faithfully as possible.
 
-It is configured with command-line flags for local runs and environment variables for container deployment.
+It can be configured with either command-line flags or environment variables. If both are set for the same option, the command-line flag takes precedence.
 
 ## Configuration and Usage
 
-For local binary runs, configure the service with command-line flags. You can clone the project and build it locally, or download a prebuilt binary from the Release page:
+For local binary runs, configure the service with command-line flags or environment variables. You can clone the project and build it locally, or download a prebuilt binary from the Release page:
 
 ```bash
 git clone https://github.com/Joey-Kot/deepseek-compatible.git
@@ -29,7 +29,7 @@ go build -trimpath -ldflags="-s -w" -o deepseek-compatible ./cmd/server
   --debug-log-body=false
 ```
 
-For container deployment, use environment variables. You can start from `docker.env.example`:
+For container deployment, environment variables are usually more convenient. You can start from `docker.env.example`:
 
 ```bash
 cp docker.env.example docker.env
@@ -63,7 +63,7 @@ docker run -itd \
   deepseek-compatible:latest
 ```
 
-Container environment reference:
+Environment variable reference:
 
 | Environment variable | Equivalent flag |
 | --- | --- |
@@ -89,6 +89,8 @@ Container environment reference:
 | `VERIFY_SSL` | `--verify-ssl` |
 | `DEBUG_PPROF` | `--debug-pprof` |
 | `DEBUG_LOG_BODY` | `--debug-log-body` |
+
+Command-line flags override environment variables when both are provided for the same option.
 
 Flag reference:
 

@@ -20,6 +20,8 @@ import (
 )
 
 func TestParseDefaults(t *testing.T) {
+	clearConfigEnv(t)
+
 	cfg, err := Parse(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -81,6 +83,8 @@ func TestParseDefaults(t *testing.T) {
 }
 
 func TestParseCommandLineFlags(t *testing.T) {
+	clearConfigEnv(t)
+
 	cfg, err := Parse([]string{
 		"--listen", "127.0.0.1:9999",
 		"--api-token", "sk-a, sk-b ,,",
@@ -167,7 +171,131 @@ func TestParseCommandLineFlags(t *testing.T) {
 	}
 }
 
+func TestParseEnvironmentVariables(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("LISTEN", "127.0.0.1:9999")
+	t.Setenv("API_TOKEN", "sk-a, sk-b ,,")
+	t.Setenv("DEEPSEEK_API_KEY", "sk-upstream")
+	t.Setenv("DEEPSEEK_BASE_URL", "https://example.test/v1")
+	t.Setenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
+	t.Setenv("DEEPSEEK_MODELS", "deepseek-v4-pro,deepseek-v4-flash")
+	t.Setenv("DEEPSEEK_HTTP_TIMEOUT", "2.5")
+	t.Setenv("DEEPSEEK_MAX_IDLE_CONNS", "300")
+	t.Setenv("DEEPSEEK_MAX_IDLE_CONNS_PER_HOST", "150")
+	t.Setenv("DEEPSEEK_MAX_CONNS_PER_HOST", "80")
+	t.Setenv("DEEPSEEK_MAX_RESPONSE_BODY_BYTES", "2048")
+	t.Setenv("STORE_MAX_RESPONSES", "11")
+	t.Setenv("STORE_MAX_CHAT_COMPLETIONS", "12")
+	t.Setenv("STORE_MAX_CONVERSATIONS", "13")
+	t.Setenv("STORE_TTL", "600")
+	t.Setenv("STORE_PRUNE_INTERVAL", "30")
+	t.Setenv("MAX_REQUEST_BODY_BYTES", "1024")
+	t.Setenv("READ_HEADER_TIMEOUT", "3.5")
+	t.Setenv("IDLE_TIMEOUT", "45")
+	t.Setenv("DEBUG_PPROF", "true")
+	t.Setenv("DEBUG_LOG_BODY", "true")
+	t.Setenv("VERIFY_SSL", "false")
+
+	cfg, err := Parse(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Listen != "127.0.0.1:9999" {
+		t.Fatalf("Listen = %q", cfg.Listen)
+	}
+	if !reflect.DeepEqual(cfg.APITokens, []string{"sk-a", "sk-b"}) {
+		t.Fatalf("APITokens = %#v", cfg.APITokens)
+	}
+	if cfg.DeepSeekAPIKey != "sk-upstream" {
+		t.Fatalf("DeepSeekAPIKey = %q", cfg.DeepSeekAPIKey)
+	}
+	if cfg.DeepSeekBaseURL != "https://example.test/v1" {
+		t.Fatalf("DeepSeekBaseURL = %q", cfg.DeepSeekBaseURL)
+	}
+	if cfg.DefaultModel != "deepseek-v4-flash" {
+		t.Fatalf("DefaultModel = %q", cfg.DefaultModel)
+	}
+	if !reflect.DeepEqual(cfg.ModelIDs, []string{"deepseek-v4-pro", "deepseek-v4-flash"}) {
+		t.Fatalf("ModelIDs = %#v", cfg.ModelIDs)
+	}
+	if cfg.DeepSeekHTTPTimeout != 2500*time.Millisecond {
+		t.Fatalf("DeepSeekHTTPTimeout = %s", cfg.DeepSeekHTTPTimeout)
+	}
+	if cfg.DeepSeekMaxIdleConns != 300 {
+		t.Fatalf("DeepSeekMaxIdleConns = %d", cfg.DeepSeekMaxIdleConns)
+	}
+	if cfg.DeepSeekMaxIdleConnsPerHost != 150 {
+		t.Fatalf("DeepSeekMaxIdleConnsPerHost = %d", cfg.DeepSeekMaxIdleConnsPerHost)
+	}
+	if cfg.DeepSeekMaxConnsPerHost != 80 {
+		t.Fatalf("DeepSeekMaxConnsPerHost = %d", cfg.DeepSeekMaxConnsPerHost)
+	}
+	if cfg.DeepSeekMaxResponseBodyBytes != 2048 {
+		t.Fatalf("DeepSeekMaxResponseBodyBytes = %d", cfg.DeepSeekMaxResponseBodyBytes)
+	}
+	if cfg.StoreMaxResponses != 11 {
+		t.Fatalf("StoreMaxResponses = %d", cfg.StoreMaxResponses)
+	}
+	if cfg.StoreMaxChatCompletions != 12 {
+		t.Fatalf("StoreMaxChatCompletions = %d", cfg.StoreMaxChatCompletions)
+	}
+	if cfg.StoreMaxConversations != 13 {
+		t.Fatalf("StoreMaxConversations = %d", cfg.StoreMaxConversations)
+	}
+	if cfg.StoreTTL != 10*time.Minute {
+		t.Fatalf("StoreTTL = %s", cfg.StoreTTL)
+	}
+	if cfg.StorePruneInterval != 30*time.Second {
+		t.Fatalf("StorePruneInterval = %s", cfg.StorePruneInterval)
+	}
+	if cfg.MaxRequestBodyBytes != 1024 {
+		t.Fatalf("MaxRequestBodyBytes = %d", cfg.MaxRequestBodyBytes)
+	}
+	if cfg.ReadHeaderTimeout != 3500*time.Millisecond {
+		t.Fatalf("ReadHeaderTimeout = %s", cfg.ReadHeaderTimeout)
+	}
+	if cfg.IdleTimeout != 45*time.Second {
+		t.Fatalf("IdleTimeout = %s", cfg.IdleTimeout)
+	}
+	if !cfg.DebugLogBody {
+		t.Fatalf("DebugLogBody = %t", cfg.DebugLogBody)
+	}
+	if !cfg.DebugPprof {
+		t.Fatalf("DebugPprof = %t", cfg.DebugPprof)
+	}
+	if cfg.VerifySSL {
+		t.Fatalf("VerifySSL = %t", cfg.VerifySSL)
+	}
+}
+
+func TestParseCommandLineFlagsTakePrecedenceOverEnvironmentVariables(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("LISTEN", "127.0.0.1:9999")
+	t.Setenv("DEEPSEEK_HTTP_TIMEOUT", "0")
+	t.Setenv("VERIFY_SSL", "false")
+
+	cfg, err := Parse([]string{
+		"--listen", "127.0.0.1:8081",
+		"--deepseek-http-timeout", "2",
+		"--verify-ssl=true",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Listen != "127.0.0.1:8081" {
+		t.Fatalf("Listen = %q", cfg.Listen)
+	}
+	if cfg.DeepSeekHTTPTimeout != 2*time.Second {
+		t.Fatalf("DeepSeekHTTPTimeout = %s", cfg.DeepSeekHTTPTimeout)
+	}
+	if !cfg.VerifySSL {
+		t.Fatal("VerifySSL should come from command-line flag")
+	}
+}
+
 func TestParsePrependsDefaultModelWhenMissingFromModelList(t *testing.T) {
+	clearConfigEnv(t)
+
 	cfg, err := Parse([]string{"--deepseek-model", "deepseek-main", "--deepseek-models", "deepseek-alt"})
 	if err != nil {
 		t.Fatal(err)
@@ -178,12 +306,16 @@ func TestParsePrependsDefaultModelWhenMissingFromModelList(t *testing.T) {
 }
 
 func TestParseRejectsNonPositiveTimeout(t *testing.T) {
+	clearConfigEnv(t)
+
 	if _, err := Parse([]string{"--deepseek-http-timeout", "0"}); err == nil {
 		t.Fatal("expected error for zero timeout")
 	}
 }
 
 func TestParseRejectsInvalidConnectionLimits(t *testing.T) {
+	clearConfigEnv(t)
+
 	for _, flag := range []string{"--deepseek-max-idle-conns", "--deepseek-max-idle-conns-per-host", "--deepseek-max-conns-per-host", "--deepseek-max-response-body-bytes"} {
 		if _, err := Parse([]string{flag, "-1"}); err == nil {
 			t.Fatalf("expected error for %s", flag)
@@ -192,6 +324,8 @@ func TestParseRejectsInvalidConnectionLimits(t *testing.T) {
 }
 
 func TestParseRejectsInvalidStoreLimits(t *testing.T) {
+	clearConfigEnv(t)
+
 	for _, flag := range []string{"--store-max-responses", "--store-max-chat-completions", "--store-max-conversations", "--store-ttl", "--store-prune-interval", "--max-request-body-bytes"} {
 		if _, err := Parse([]string{flag, "-1"}); err == nil {
 			t.Fatalf("expected error for %s", flag)
@@ -200,6 +334,8 @@ func TestParseRejectsInvalidStoreLimits(t *testing.T) {
 }
 
 func TestParseRejectsNonPositiveServerTimeouts(t *testing.T) {
+	clearConfigEnv(t)
+
 	for _, flag := range []string{"--read-header-timeout", "--idle-timeout"} {
 		if _, err := Parse([]string{flag, "0"}); err == nil {
 			t.Fatalf("expected error for %s", flag)
@@ -207,7 +343,18 @@ func TestParseRejectsNonPositiveServerTimeouts(t *testing.T) {
 	}
 }
 
+func TestParseRejectsInvalidEnvironmentVariable(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("DEEPSEEK_HTTP_TIMEOUT", "not-a-number")
+
+	if _, err := Parse(nil); err == nil || !strings.Contains(err.Error(), "DEEPSEEK_HTTP_TIMEOUT") {
+		t.Fatalf("expected DEEPSEEK_HTTP_TIMEOUT error, got %v", err)
+	}
+}
+
 func TestUsageIncludesCurrentFlagsAndProtocolSummary(t *testing.T) {
+	clearConfigEnv(t)
+
 	var out bytes.Buffer
 	cfg := defaultConfig()
 	var flags parseFlags
@@ -225,6 +372,7 @@ func TestUsageIncludesCurrentFlagsAndProtocolSummary(t *testing.T) {
 		"--store-prune-interval",
 		"--max-request-body-bytes",
 		"--debug-pprof",
+		"Command-line flags take precedence",
 		"docker.env.example",
 		"OpenAI Responses",
 		"Gemini Generate Content",
@@ -233,5 +381,12 @@ func TestUsageIncludesCurrentFlagsAndProtocolSummary(t *testing.T) {
 		if !strings.Contains(text, want) {
 			t.Fatalf("usage output missing %q:\n%s", want, text)
 		}
+	}
+}
+
+func clearConfigEnv(t *testing.T) {
+	t.Helper()
+	for _, envFlag := range envFlags {
+		t.Setenv(envFlag.Env, "")
 	}
 }
