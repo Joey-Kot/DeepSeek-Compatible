@@ -91,7 +91,7 @@ jobs:
           package="${BINARY_NAME}_${GOOS}_${GOARCH}"
           mkdir -p "dist/${package}"
           go build -trimpath -ldflags="-s -w" -o "dist/${package}/${BINARY_NAME}${{ matrix.ext }}" ./cmd/server
-          cp README.md LICENSE args.example "dist/${package}/"
+          cp README.md LICENSE NOTICE args.example "dist/${package}/"
 
       - name: Package archive
         working-directory: dist
